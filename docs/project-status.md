@@ -2,6 +2,13 @@
 
 _Date: 2026-10-22 (local UTC+5:30). Machine: Windows 11 build 26200, non-admin shell._
 
+> **Layout note:** after the layered restructure, source files live in
+> `src/engine/`, `src/capture/`, `src/traffic/`, `src/verify/`,
+> `src/reporting/`, `src/tap/`, and the dated milestone reports moved verbatim
+> to `docs/history/`. The current layout — including the old→new path map —
+> lives in [`ARCHITECTURE.md`](ARCHITECTURE.md); use it to translate any flat
+> `src/*.ts` path quoted in the dated sections below.
+
 ## 0. Mission (one line)
 
 Build a small, verifiable Windows prototype of Strobe's packet-tracking engine:
@@ -15,8 +22,8 @@ oracle — milestone by milestone, never claiming anything we haven't run.
 
 | Milestone | Scope | Status | Score |
 |---|---|---|---|
-| **M1** — capture path works | pktmon → ETL → etl2pcap → pure-TS PCAPNG parse + framing | ✅ **DONE**, reported (`docs/milestone-1-report.md`) | 100% |
-| **M2** — decode + parity vs tshark | PacketDecoder (16/16 tests) + parity engine, port-only filters, 15-scenario corpus | ✅ **DONE**, reported (`docs/milestone-2-report.md`) | core batch **9/9 scenarios 100% parity** (target ≥90%), extended batch honest findings |
+| **M1** — capture path works | pktmon → ETL → etl2pcap → pure-TS PCAPNG parse + framing | ✅ **DONE**, reported (`docs/history/milestone-1-report.md`) | 100% |
+| **M2** — decode + parity vs tshark | PacketDecoder (16/16 tests) + parity engine, port-only filters, 15-scenario corpus | ✅ **DONE**, reported (`docs/history/milestone-2-report.md`) | core batch **9/9 scenarios 100% parity** (target ≥90%), extended batch honest findings |
 | **M3** — flow engine ("stories") | per-flow timelines, TCP stream reassembly, DNS attribution, HTTP extraction, verification vs tshark conv tables | 🟡 **~90% — engine done; verification matrix 14/14 traces FULL PASS; only CLI wiring + unit tests + the written report remain** | 14/14 checks pass (see §3) |
 | **M4+** — candidates chosen later | loopback vantage, richer stories, fragment reassembly | ⬜ not started | — |
 
@@ -139,7 +146,7 @@ items below are packaging, not verification.**
        reachable via `node out\scen\m3_verify_*.ts` scripts) — 30 min.
 3. [ ] Add a few unit tests for the flow engine (reassembly semantics,
        HTTP parser, dedupe reuse) — 1–2 h.
-4. [ ] Write `docs/milestone-3-report.md` + `test-results/milestone3.md`
+4. [ ] Write `docs/history/milestone-3-report.md` + `test-results/milestone3.md`
        (same format as M2: files, commands, real numbers, known limitations) —
        45 min, done last.
 5. [ ] README quick-start section for M3 — 15 min.
@@ -192,10 +199,14 @@ checkpoint.
 ```
 strobe-packet-tracker/
 ├── docs/
-│   ├── milestone-1-report.md          ✅ M1 report
-│   ├── milestone-2-report.md          ✅ M2 report (definitive, with all fixes)
+│   ├── ARCHITECTURE.md                ✅ current module map + old→new path map
+│   ├── DEVELOPMENT.md                 ✅ dev guide (setup, gates, conventions)
 │   ├── project-status.md              ✅ THIS report
-│   └── (milestone-3-report.md — TODO, last M3 item)
+│   └── history/                       ✅ verbatim milestone evidence records
+│       ├── step0-environment.md           ✅ step-0 machine/tool inventory
+│       ├── milestone-1-report.md          ✅ M1 report
+│       ├── milestone-2-report.md          ✅ M2 report (definitive, with all fixes)
+│       └── milestone-3-report.md          ✅ M3 report
 ├── test-results/
 │   ├── milestone1.md                  ✅ M1 run log
 │   ├── milestone2-core.md, milestone2-ext.md  ✅ M2 per-batch tables
@@ -243,7 +254,7 @@ strobe-packet-tracker/
       the report) — **the stop-and-report gate: PASSED, 14/14**
 - [ ] `m3-flows` / `m3-verify` CLI + npm scripts wired
 - [ ] flow-engine unit tests in `test/`
-- [ ] `docs/milestone-3-report.md` + `test-results/milestone3.md` written with
+- [ ] `docs/history/milestone-3-report.md` + `test-results/milestone3.md` written with
       the same discipline as M2 (files → commands → real outputs → limits)
 - [ ] README updated for M3
 - then, with your go-ahead: **M4 choice** (menu: loopback vantage workstream,
