@@ -5,6 +5,11 @@
 // one IDB with linktype Ethernet(1) and if_tsresol=6 (decimal microseconds),
 // then EPBs in wire order. Block CRCs are omitted — the pcapng spec makes
 // them optional per block and parsePcapng does not expect them.
+//
+// Layer:     engine — pure serialization (Buffer out; caller does the I/O)
+// Milestone: M4a — loopback-tap trace writer (docs/project-status.md)
+// Verified:  writer→parsePcapng roundtrip (test/loopbacktap.test.ts); tshark reads its output in the m4a gate
+// Exports:   writePcapng, PcapngChunk, PcapngWriteOptions
 
 const SHB_BLOCK = 0x0a0d0d0a;
 const IDB_BLOCK = 0x00000001;

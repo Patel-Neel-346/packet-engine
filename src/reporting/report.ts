@@ -7,9 +7,14 @@
 //   - DNS attribution table
 //   - IPv4 fragment list
 //   - Raw JSON data embedded as window.__data for scripting
+//
+// Layer:     reporting — pure HTML generation (string building; no I/O)
+// Milestone: M4c — per-trace HTML report (docs/project-status.md)
+// Verified:  gate 6 of `npm run test:all` (dashboard regeneration)
+// Exports:   generateHtml
 
-import type { FlowAnalysis, Flow } from "./flows.ts";
-import { bytesLabel } from "./flows.ts";
+import type { FlowAnalysis, Flow } from "../engine/flows.ts";
+import { bytesLabel } from "../engine/flows.ts";
 
 // ─── mini template helpers ───────────────────────────────────────────────────
 
@@ -107,6 +112,8 @@ function renderFlowDetail(f: Flow, idx: number): string {
 
 // ─── main generator ───────────────────────────────────────────────────────────
 
+/** Render one complete self-contained HTML report (a single string) for a
+ * FlowAnalysis. */
 export function generateHtml(a: FlowAnalysis): string {
   const ts = new Date().toISOString();
   const totalUnique = a.flows.reduce((s, f) => s + f.uniquePackets, 0);

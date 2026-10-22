@@ -10,6 +10,11 @@
 //   <ps1>.log        every step marker + captured output (Add-Content)
 //   <ps1>.exitcode   the script's own final exit code
 // The non-elevated Node process reads both back.
+//
+// Layer:     capture — elevated (UAC) process I/O
+// Milestone: M1 — one-UAC-prompt runner (docs/history/milestone-1-report.md)
+// Verified:  used by every real capture run (M1 + both M2 batches); logs recorded in the milestone reports
+// Exports:   runElevatedScript, ElevatedResult
 
 import { spawn } from "node:child_process";
 import fs from "node:fs";
@@ -54,6 +59,8 @@ function wrapperCommand(scriptPath: string): string {
   ].join("; ");
 }
 
+/** Launch one generated .ps1 elevated (Start-Process -Verb RunAs — a single
+ * UAC prompt) and read back its .log and .exitcode sidecar files. */
 export async function runElevatedScript(ps1: string): Promise<ElevatedResult> {
   for (const p of [ps1]) assertSafePath(p);
   const logFile = ps1.replace(/\.ps1$/, ".log");

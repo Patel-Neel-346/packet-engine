@@ -2,11 +2,16 @@
 // loopback tap, verifies application truth AND flow-engine agreement, writes
 // the synthesized PCAPNG traces, and can optionally run the full M3 tshark
 // gate on them (which simultaneously proves tshark accepts our pcapng writer).
+//
+// Layer:     tap — scenario runner (drives traffic/ generators through the tap)
+// Milestone: M4a — loopback runner (docs/project-status.md)
+// Verified:  gate 8 of `npm run test:all` (s2_local_split, s13_ws, s11_loopback all pass)
+// Exports:   runM4Loopback, printM4Loopback
 
 import fs from "node:fs";
 import path from "node:path";
 import { LoopbackTap, type TcpStory } from "./loopbacktap.ts";
-import { analyzePcapFile, bytesLabel, type FlowAnalysis, type Flow } from "./flows.ts";
+import { analyzePcapFile, bytesLabel, type FlowAnalysis, type Flow } from "../engine/flows.ts";
 import {
   buildTrafficContext,
   localHttpScenario,
@@ -14,8 +19,8 @@ import {
   loopbackScenario,
   type TrafficContext,
   type TrafficResult,
-} from "./traffic.ts";
-import { verifyTrace } from "./m3Verify.ts";
+} from "../traffic/traffic.ts";
+import { verifyTrace } from "../verify/m3Verify.ts";
 
 export interface CheckResult {
   name: string;
@@ -229,6 +234,9 @@ const SCENARIOS = [
   { id: "s11_loopback", f: loopbackScenario },
 ] as const;
 
+/** Run the three loopback scenarios through the tap; verify app truth + flow
+ * engine agreement; write synthesized traces (and optionally run the tshark
+ * M3 gate on them). */
 export async function runM4Loopback(opts: {
   withTshark: boolean;
   outDir?: string;

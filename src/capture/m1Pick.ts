@@ -6,13 +6,18 @@
 // Background fact recorded earlier: pktmon TCPIP-protocol components log
 // bare IP packets (no Ethernet header) while filter components log full
 // Ethernet frames, so this pick matters after each machine-specific run.
+//
+// Layer:     capture — artifact-side analysis (tshark-assisted)
+// Milestone: M1 — trace pick (docs/history/milestone-1-report.md)
+// Verified:  picked out/m1.pcapng used by the M1/M3 verification gates on this machine
+// Exports:   m1Pick
 
 import fs from "node:fs";
 import path from "node:path";
-import { parsePcapng } from "./pcapng.ts";
+import { parsePcapng } from "../engine/pcapng.ts";
 import { runCommand, tsharkExe } from "./pktmon.ts";
 
-const REPO = path.resolve(import.meta.dirname, "..");
+const REPO = path.resolve(import.meta.dirname, "..", "..");
 const OUT = path.join(REPO, "out");
 
 interface CompStats {
@@ -64,6 +69,8 @@ async function compStats(file: string): Promise<
   return { epbs: parsePcapng(fs.readFileSync(file)).packets.length, ethFrames, bareL3, ipFrames };
 }
 
+/** Classify the per-component traces (out/m1_comp<id>.pcapng) and copy the
+ * best-decoded one to out/m1.pcapng. Returns a process exit code. */
 export async function m1Pick(): Promise<number> {
   const compFiles = fs
     .readdirSync(OUT)

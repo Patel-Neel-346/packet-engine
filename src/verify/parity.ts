@@ -4,13 +4,18 @@
 //   timestamp, frame length, captured length, src/dst IP, src/dst port,
 //   protocol, TCP flags, flow membership.
 // Packets we cannot decode count as "unsupported" and NEVER as matches.
+//
+// Layer:     verify — tshark-oracle I/O (21-column fields export + comparison)
+// Milestone: M2 addendum — parity metric (docs/history/milestone-2-report.md)
+// Verified:  gate 4 of `npm run test:all` — 14 traces at thresholds, exceptions: none
+// Exports:   computeParity, tsharkReadFrames, ParityResult
 
 import fs from "node:fs";
 import path from "node:path";
-import { parsePcapng, packetTimestampSeconds, type PcapngFile } from "./pcapng.ts";
-import { canonicalFlow, flowIdOf, type DecodedPacket } from "./decoder.ts";
-import { dedupePackets, decodeAllPackets, type DuplicateGroup } from "./dedupe.ts";
-import { runCommand, tsharkExe } from "./pktmon.ts";
+import { parsePcapng, packetTimestampSeconds, type PcapngFile } from "../engine/pcapng.ts";
+import { canonicalFlow, flowIdOf, type DecodedPacket } from "../engine/decoder.ts";
+import { dedupePackets, decodeAllPackets, type DuplicateGroup } from "../engine/dedupe.ts";
+import { runCommand, tsharkExe } from "../capture/pktmon.ts";
 
 export interface TsharkFrame {
   num: number;
@@ -37,6 +42,8 @@ export interface TsharkFrame {
   tlsSni: string | null;
 }
 
+/** Read one trace with `tshark -T fields` (21 columns, one row per frame) as
+ * the oracle view. */
 export async function tsharkReadFrames(file: string): Promise<TsharkFrame[]> {
   const args = [
     "-r", file, "-n", "-T", "fields",
@@ -115,6 +122,9 @@ export interface ParityResult {
   notes: string[];
 }
 
+/** Dedupe our decode of the trace, then compare every unique packet against
+ * the tshark rows. Packets we cannot decode count as "unsupported", never
+ * as matches. */
 export async function computeParity(
   scenario: string,
   file: string,

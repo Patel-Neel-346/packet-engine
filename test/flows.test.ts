@@ -15,12 +15,12 @@
 
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { buildFlows, bytesLabel } from '../src/flows.ts';
-import { dedupePackets, decodeAllPackets } from '../src/dedupe.ts';
+import { buildFlows, bytesLabel } from '../src/engine/flows.ts';
+import { dedupePackets, decodeAllPackets } from '../src/engine/dedupe.ts';
 
 // ---- helpers ---------------------------------------------------------------
 
-function ethHdr(ethertype) {
+function ethHdr(ethertype: number) {
   const h = Buffer.alloc(14);
   Buffer.from('020203040506', 'hex').copy(h, 0);
   Buffer.from('020203040507', 'hex').copy(h, 6);
@@ -28,7 +28,7 @@ function ethHdr(ethertype) {
   return h;
 }
 
-function ip4Hdr(src, dst, proto, payloadLen, id = 0x1234, flags = 2, frag = 0) {
+function ip4Hdr(src: string, dst: string, proto: number, payloadLen: number, id = 0x1234, flags = 2, frag = 0) {
   const h = Buffer.alloc(20);
   h[0] = 0x45;
   h.writeUInt16BE(20 + payloadLen, 2);
@@ -45,7 +45,7 @@ function ip4Hdr(src, dst, proto, payloadLen, id = 0x1234, flags = 2, frag = 0) {
   return h;
 }
 
-function tcpPkt(src, sport, dst, dport, flags, seq, ack, payload = Buffer.alloc(0)) {
+function tcpPkt(src: string, sport: number, dst: string, dport: number, flags: number, seq: number, ack: number, payload = Buffer.alloc(0)) {
   const tcp = Buffer.alloc(20 + payload.length);
   tcp.writeUInt16BE(sport, 0); tcp.writeUInt16BE(dport, 2);
   tcp.writeUInt32BE(seq >>> 0, 4); tcp.writeUInt32BE(ack >>> 0, 8);
@@ -55,7 +55,7 @@ function tcpPkt(src, sport, dst, dport, flags, seq, ack, payload = Buffer.alloc(
   return Buffer.concat([ethHdr(0x0800), ip, tcp]);
 }
 
-function udpPkt(src, sport, dst, dport, payload) {
+function udpPkt(src: string, sport: number, dst: string, dport: number, payload: Buffer) {
   const udp = Buffer.alloc(8 + payload.length);
   udp.writeUInt16BE(sport, 0); udp.writeUInt16BE(dport, 2);
   udp.writeUInt16BE(8 + payload.length, 4);
@@ -64,13 +64,13 @@ function udpPkt(src, sport, dst, dport, payload) {
   return Buffer.concat([ethHdr(0x0800), ip, udp]);
 }
 
-function icmpPkt(src, dst) {
+function icmpPkt(src: string, dst: string) {
   const icmp = Buffer.from([0x08, 0x00, 0xf7, 0xff, 0x00, 0x01, 0x00, 0x01]);
   const ip = ip4Hdr(src, dst, 1, icmp.length);
   return Buffer.concat([ethHdr(0x0800), ip, icmp]);
 }
 
-function makePcap(frames, tsGapUs = 1000) {
+function makePcap(frames: Buffer[], tsGapUs = 1000) {
   const iface = { id: 0, linkType: 1, snaplen: 65535, tsResolRaw: 6, name: null, os: null };
   const packets = frames.map((data, i) => ({
     interfaceId: 0, tsHigh: 0, tsLow: i * tsGapUs,
@@ -109,7 +109,7 @@ test('single TCP flow: SYN/SYN-ACK/data/FIN, handshakeComplete=true', () => {
   assert.equal(a.flows.length, 1, 'exactly one flow');
   const f = a.flows[0];
   assert.equal(f.kind, 'tcp');
-  const t = f.tcp;
+  const t = f.tcp!;
   assert.ok(t.syn, 'SYN seen');
   assert.ok(t.synAck, 'SYN-ACK seen');
   assert.ok(t.handshakeComplete, 'handshake complete');
@@ -131,7 +131,7 @@ test('TCP RST: recorded, handshake incomplete', () => {
     tcpPkt('1.2.3.4', 5000, '5.6.7.8', 80, RST, 1, 1),
   ];
   const a = buildFlows(makePcap(pkts), 't');
-  const t = a.flows[0].tcp;
+  const t = a.flows[0].tcp!;
   assert.ok(t.rst, 'RST recorded');
   assert.ok(!t.handshakeComplete, 'handshake not complete');
 });
@@ -145,7 +145,7 @@ test('TCP out-of-order: segments reassembled in seq order', () => {
     tcpPkt('1.0.0.1', 2000, '1.0.0.2', 443, PSH|ACK, 1, 1, Buffer.from('Hello')),
   ];
   const a = buildFlows(makePcap(pkts), 't');
-  const a2b = a.flows[0].tcp.a2b;
+  const a2b = a.flows[0].tcp!.a2b!;
   assert.ok(a2b.bytes.length >= 10, 'both segments present');
   assert.equal(a2b.bytes.subarray(0, 5).toString(), 'Hello');
   assert.equal(a2b.bytes.subarray(5, 10).toString(), 'World');
@@ -163,7 +163,7 @@ test('TCP retransmission: fully-covered segment increments retransSegs', () => {
   ];
   const a = buildFlows(makePcap(pkts, 5000), 't');
   const f = a.flows[0];
-  const s = f.tcp.a2b;
+  const s = f.tcp!.a2b;
   assert.ok(s, 'a2b stream');
   assert.equal(s.retransSegs, 1, 'one retransmission segment');
   assert.equal(s.retransBytes, payload.length, 'correct retrans bytes');
@@ -180,7 +180,7 @@ test('TCP gap: missing segment recorded, zeroed in stream bytes', () => {
     tcpPkt('3.0.0.1', 4000, '3.0.0.2', 80, PSH|ACK, 11, 1, Buffer.from('BBBBB')),
   ];
   const a = buildFlows(makePcap(pkts), 't');
-  const s = a.flows[0].tcp.a2b;
+  const s = a.flows[0].tcp!.a2b!;
   assert.equal(s.gapCount, 1, 'one gap');
   assert.equal(s.gapBytes, 5, '5 gap bytes');
   assert.equal(s.bytes.length, 15);

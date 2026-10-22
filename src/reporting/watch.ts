@@ -1,11 +1,16 @@
 // M4-c: Watch mode and batch reporting.
 // Scans a directory for .pcapng files, runs FlowAnalysis, generates HTML reports
 // and an aggregate index dashboard, with support for live polling/watching.
+//
+// Layer:     reporting — filesystem I/O (scan, per-trace reports, index dashboard, watch loop)
+// Milestone: M4c — batch + watch mode (docs/project-status.md)
+// Verified:  gates 6 + 7 of `npm run test:all` (dashboard + json/csv/md exports)
+// Exports:   processTraceFile, scanAndReportAll, generateIndexHtml, printConsoleSummary, openInBrowser, watchDirectory
 
 import fs from "node:fs";
 import path from "node:path";
 import { exec } from "node:child_process";
-import { analyzePcapFile, bytesLabel } from "./flows.ts";
+import { analyzePcapFile, bytesLabel } from "../engine/flows.ts";
 import { generateHtml } from "./report.ts";
 import { toCsv, toJson, toMarkdown } from "./export.ts";
 

@@ -21,12 +21,17 @@
 // at the CLIENT socket's send side, server->client bytes at the SERVER
 // socket's send side. Receive observations synthesize pure ACKs only, so each
 // payload byte appears in the trace exactly once (no copy/duplicate artifacts).
+//
+// Layer:     tap — in-process net/dgram interception (userland vantage; no elevation)
+// Milestone: M4a — loopback tap (docs/project-status.md)
+// Verified:  test/loopbacktap.test.ts (writer roundtrip + seq/ack math) + gate 8 (3 scenarios)
+// Exports:   LoopbackTap
 
 import net from "node:net";
 import dgram from "node:dgram";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import { writePcapng, type PcapngChunk } from "./pcapngwrite.ts";
+import { writePcapng, type PcapngChunk } from "../engine/pcapngwrite.ts";
 
 export type Dir = "c2s" | "s2c";
 
@@ -124,6 +129,9 @@ function randIpId(): number {
   return 0x4000 | Math.floor(Math.random() * 0x2000);
 }
 
+/** In-process traffic tap: while armed it intercepts net (TCP) and dgram
+ * (UDP) calls, records per-connection application-level byte truth, and
+ * synthesizes Ethernet/IPv4-framed chunks for pcapng export. */
 export class LoopbackTap {
   private tcpSeq = 0;
   private udpSeq = 0;

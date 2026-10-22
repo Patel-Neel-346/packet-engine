@@ -8,6 +8,11 @@
 //
 // Verified against real pktmon output in Milestone 1 and cross-checked with
 // tshark (Wireshark 4.6.9) frame-by-frame.
+//
+// Layer:     engine — pure parsing (zero I/O; bytes in, values out)
+// Milestone: M1 — PCAPNG parser (docs/history/milestone-1-report.md)
+// Verified:  M1 frame-by-frame tshark cross-check (96 frames, 0 mismatches); load-bearing for every later gate
+// Exports:   parsePcapng, packetTimestampSeconds, timestampDivisor, tickValue, linkTypeName
 
 export interface PcapngShb {
   majorVersion: number;
@@ -120,6 +125,8 @@ function readCstring(buf: Buffer): string | null {
   return s.length === 0 ? "" : s.toString("utf8");
 }
 
+/** Parse a complete PCAPNG file image into interfaces and packets. Unknown
+ * block types are counted (skippedBlocks); malformed data lands in parseErrors. */
 export function parsePcapng(buf: Buffer): PcapngFile {
   const out: PcapngFile = {
     shb: null,

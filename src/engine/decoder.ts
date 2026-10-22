@@ -12,6 +12,11 @@
 // in `errors`. Fragments are described (id/offset/flags) but NOT reassembled
 // (documented v1 limitation). Bounded loops everywhere (DNS label pointer
 // loops cannot hang). Never silently drops parse errors.
+//
+// Layer:     engine — pure parsing (zero I/O; never throws)
+// Milestone: M2 — packet decoder (docs/history/milestone-2-report.md)
+// Verified:  16 unit tests (test/decoder.test.ts) + 14-trace tshark parity corpus
+// Exports:   decodePacket, canonicalFlow, flowIdOf, TCP_* flag masks, DecodedPacket
 
 export interface IpInfo {
   version: 4 | 6;
@@ -568,6 +573,8 @@ function parseTlsClientHello(
   return info;
 }
 
+/** Decode one captured frame for the given interface linkType. Never throws —
+ * every problem is recorded in the returned packet's `errors`. */
 export function decodePacket(linkType: number, bytes: Buffer, origLen: number): DecodedPacket {
   const errors: string[] = [];
   const out: DecodedPacket = {
@@ -699,6 +706,8 @@ export function canonicalFlow(
     : { aip: dst, aport: dport, bip: src, bport: sport, proto };
 }
 
+/** Canonical flow id `p<proto> aip:aport <--> bip:bport` for a decoded packet,
+ * or null when the transport carries no ports (e.g. ARP, fragments). */
 export function flowIdOf(p: DecodedPacket): string | null {
   const t = p.transport;
   const i = p.ip;

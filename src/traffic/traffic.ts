@@ -2,13 +2,18 @@
 // Every generator spawns REAL tools present on this machine (in-box curl,
 // ping, PowerShell) or uses Node sockets directly — argv arrays only, no
 // shell strings. Results are recorded verbatim for the milestone report.
+//
+// Layer:     traffic — real-network I/O (curl/ping/Edge + raw sockets; non-elevated)
+// Milestone: M2 — scenario traffic generators (docs/history/milestone-2-report.md)
+// Verified:  generated the traffic behind all 14 captured traces; step results recorded verbatim in the milestone reports
+// Exports:   one generator per scenario (s1..s15) + buildTrafficContext, resolveBoth, ipFilters, curl
 
 import dns from "node:dns";
 import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import fs from "node:fs";
-import { runCommand } from "./pktmon.ts";
+import { runCommand } from "../capture/pktmon.ts";
 import { dnsQueryUdp, dnsQueryTcp } from "./dnsgen.ts";
 import {
   startSplitHttpServer,
@@ -60,6 +65,7 @@ function rec(
 
 // ------------------------------------------------------------- environment
 
+/** Resolve a hostname to its IPv4 and IPv6 address lists (empty on failure; never throws). */
 export async function resolveBoth(host: string): Promise<{ v4: string[]; v6: string[] }> {
   const out = { v4: [] as string[], v6: [] as string[] };
   await dns.promises.resolve4(host).then((a) => (out.v4 = a), () => { /* NXDOMAIN-ish */ });
@@ -77,6 +83,7 @@ function firstLocalSiteIp(): string {
   return "127.0.0.1";
 }
 
+/** Resolve every endpoint the scenarios need, plus local IPs/ports, once per batch run. */
 export async function buildTrafficContext(): Promise<TrafficContext> {
   const example = await resolveBoth("example.org");
   const speed = await resolveBoth("speed.cloudflare.com");
@@ -100,11 +107,13 @@ export async function buildTrafficContext(): Promise<TrafficContext> {
 
 // ------------------------------------------------------------------ helpers
 
+/** Run in-box curl.exe with an argv array and record the step result (re-exported). */
 async function curl(res: TrafficResult, args: string[], step: string): Promise<void> {
   const r = await runCommand("C:\\Windows\\System32\\curl.exe", args, { timeoutMs: 120_000 });
   rec(res, step, r.code, `${(r.stdout || r.stderr).slice(0, 120)}`);
 }
 
+/** Build one pktmon CaptureFilterSpec per IP (`-i <ip> -t <transport> -p <port>`). */
 export function ipFilters(
   ips: string[],
   port: number,
@@ -119,6 +128,7 @@ export function ipFilters(
 
 // --------------------------------------------------------------- generators
 
+/** s1: n sequential HTTPS fetches from example.org (TLS 1.3 by default). */
 export async function httpsFetch(
   ctx: TrafficContext,
   n = 3,
@@ -130,6 +140,7 @@ export async function httpsFetch(
   return res;
 }
 
+/** s2: n sequential plain-HTTP fetches to example.org:80 (301 redirect expected). */
 export async function httpExternalFetch(
   ctx: TrafficContext,
   n = 3,
@@ -142,6 +153,7 @@ export async function httpExternalFetch(
   return res;
 }
 
+/** s2_local_split: split-write HTTP server + clients on loopback and the site IP. */
 export async function localHttpScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -182,6 +194,7 @@ export async function localHttpScenario(
   return res;
 }
 
+/** s3: A + AAAA + NXDOMAIN over UDP and A/AAAA over TCP/53 (own transaction ids). */
 export async function dnsMixed(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -200,6 +213,7 @@ export async function dnsMixed(
   return res;
 }
 
+/** s4/s14: one large HTTPS download from speed.cloudflare.com (size set by caller). */
 export async function httpsDownload(
   ctx: TrafficContext,
   bytes: number,
@@ -210,6 +224,7 @@ export async function httpsDownload(
   return res;
 }
 
+/** s5: normal FIN close, a hard socket RST, and a refused-port connect. */
 export async function tcpLifecycleScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -234,6 +249,7 @@ s.on('error', () => {});`,
   return res;
 }
 
+/** s6: forced -4/-6 curl fetches over HTTPS and HTTP. */
 export async function v4v6Scenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -245,6 +261,7 @@ export async function v4v6Scenario(
   return res;
 }
 
+/** s7: n concurrent HTTPS fetches (independent source ports expected). */
 export async function parallelCurls(
   ctx: TrafficContext,
   n = 8,
@@ -262,6 +279,7 @@ export async function parallelCurls(
   return res;
 }
 
+/** s8: ping v4/v6 plus a 3000-byte ping that must fragment (MTU 1500). */
 export async function icmpScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -274,6 +292,8 @@ export async function icmpScenario(
   return res;
 }
 
+/** s9: headless Edge against cloudflare-quic.com — QUIC presence is verified
+ * from the captured trace, not from the browser claim. */
 export async function quicScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -301,6 +321,8 @@ export async function quicScenario(
   return res;
 }
 
+/** s10: ARP probe (ping an unused LAN address) + read-only `arp -a` + an
+ * `ipconfig /renew` attempt (may be denied non-elevated — recorded either way). */
 export async function arpDhcpScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -321,6 +343,7 @@ export async function arpDhcpScenario(
   return res;
 }
 
+/** s11: TCP + UDP echo conversations between local processes. */
 export async function loopbackScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -355,6 +378,7 @@ export async function loopbackScenario(
   return res;
 }
 
+/** s13: RFC 6455 WebSocket upgrade + one echo frame, over plain HTTP. */
 export async function wsScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -369,6 +393,7 @@ export async function wsScenario(
   return res;
 }
 
+/** s14: one burst download (thin wrapper over httpsDownload). */
 export async function burstScenario(
   ctx: TrafficContext,
   bytes: number,
@@ -376,6 +401,7 @@ export async function burstScenario(
   return httpsDownload(ctx, bytes, "burst");
 }
 
+/** s12: saturate the Wi-Fi path with concurrent multi-MB TLS downloads. */
 export async function retransmissionScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {
@@ -390,6 +416,7 @@ export async function retransmissionScenario(
   return res;
 }
 
+/** s15: TLS 1.3 (default) + forced TLS 1.2 handshakes against example.org. */
 export async function tlsHelloScenario(
   ctx: TrafficContext,
 ): Promise<TrafficResult> {

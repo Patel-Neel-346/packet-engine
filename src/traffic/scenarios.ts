@@ -2,8 +2,13 @@
 // scenario. Core scenarios must reach >=90% packet parity vs tshark.
 // Traffic generation is non-elevated; capture is elevated (one UAC click
 // per batch, not per scenario).
+//
+// Layer:     traffic — scenario definitions (data + plan building; no direct I/O)
+// Milestone: M2 addendum — scenario corpus (docs/history/milestone-2-report.md)
+// Verified:  each definition produced its captured trace + parity row in test-results/milestone2-*.md
+// Exports:   coreScenarios, extendedScenarios, buildPlans, ScenarioDef
 
-import type { CapturePlan, CaptureFilterSpec, ComponentSelection } from "./backend.ts";
+import type { CapturePlan, CaptureFilterSpec, ComponentSelection } from "../capture/backend.ts";
 import type { TrafficContext } from "./traffic.ts";
 import {
   httpsFetch,
@@ -65,6 +70,7 @@ async function toResult(p: Promise<TrafficResult>): Promise<TrafficResult> {
   return p;
 }
 
+/** Core scenario definitions — each must reach the >=90% packet-parity threshold vs tshark. */
 export function coreScenarios(): ScenarioDef[] {
   return [
     {
@@ -179,6 +185,9 @@ export function coreScenarios(): ScenarioDef[] {
   ];
 }
 
+/** Extended/addendum scenario definitions (exploratory checks; the loopback
+ * probes s2_local_split / s11_loopback / s13_ws live here — pktmon cannot see
+ * them, which is the verified Finding A behind the M4a tap). */
 export function extendedScenarios(): ScenarioDef[] {
   return [
     {
@@ -264,6 +273,8 @@ export function extendedScenarios(): ScenarioDef[] {
   ];
 }
 
+/** Turn scenario definitions + the resolved traffic context into ordered
+ * CapturePlans for the capture backend. */
 export function buildPlans(
   scenarios: ScenarioDef[],
   ctx: TrafficContext,

@@ -6,6 +6,11 @@
 //   3. Compare counts, per-frame cap_len/orig_len/timestamps, and report
 //      protocol/flow/duplicate/truncation facts.
 // Nothing is claimed unless it was actually computed and printed here.
+//
+// Layer:     verify — tshark-oracle I/O (reads the trace twice: our parser + tshark)
+// Milestone: M1 — capture-path cross-check (docs/history/milestone-1-report.md)
+// Verified:  gate 3 of `npm run test:all` (96 frames, 0 mismatches on the baseline trace)
+// Exports:   m1Verify
 
 import crypto from "node:crypto";
 import fs from "node:fs";
@@ -15,10 +20,10 @@ import {
   packetTimestampSeconds,
   linkTypeName,
   type PcapngFile,
-} from "./pcapng.ts";
-import { runCommand, tsharkExe } from "./pktmon.ts";
+} from "../engine/pcapng.ts";
+import { runCommand, tsharkExe } from "../capture/pktmon.ts";
 
-const REPO = path.resolve(import.meta.dirname, "..");
+const REPO = path.resolve(import.meta.dirname, "..", "..");
 const OUT = path.join(REPO, "out");
 const PCAPNG = path.join(OUT, "m1.pcapng");
 const REPORT = path.join(OUT, "m1-verify.json");
@@ -134,6 +139,8 @@ function flowId(f: FlowKey): string {
   return `${f.proto} ${f.src}:${f.sport} <--> ${f.dst}:${f.dport}`;
 }
 
+/** Cross-check out/m1.pcapng frame-by-frame against tshark (counts,
+ * cap_len/orig_len/timestamps). Returns a process exit code. */
 export async function m1Verify(): Promise<number> {
   if (!fs.existsSync(PCAPNG)) {
     console.log(`Missing ${PCAPNG}. Run: npm run m1:capture`);

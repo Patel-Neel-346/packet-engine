@@ -10,12 +10,17 @@
 //   7. M4a loopback tap: 3 local scenarios + the tshark gate on tap traces
 // Results: console table + test-results/test-all.md. Exit 0 only when every
 // gate passes.
+//
+// Layer:     orchestration — the 8-gate verification suite (spawns tsc/node/tshark)
+// Milestone: final verification model (docs/project-status.md)
+// Verified:  baseline 8/8 PASS (~43.5s) — this file is itself the top-level gate
+// Exports:   runTestAll, GateResult
 
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
-import { m1Verify } from "./m1Verify.ts";
-import { runM4Loopback, printM4Loopback, type LoopbackRun } from "./m4Loopback.ts";
+import { m1Verify } from "./verify/m1Verify.ts";
+import { runM4Loopback, printM4Loopback, type LoopbackRun } from "./tap/m4Loopback.ts";
 
 export interface GateResult {
   name: string;
@@ -83,6 +88,8 @@ function runNpm(script: string, label: string): { code: number; stdout: string }
 const TSC_BIN = path.join("node_modules", "typescript", "bin", "tsc");
 const M1_TRACE = path.join("out", "m1.pcapng");
 
+/** Run all 8 verification gates and print the consolidated table.
+ * Exit 0 only when every gate passes. */
 export async function runTestAll(): Promise<GateResult[]> {
   const t0 = Date.now();
   console.log("[test-all] starting full verification suite (offline, no UAC)");

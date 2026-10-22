@@ -21,15 +21,20 @@
 //       engine analyzed, so tshark never sees the copy artifacts. Ours <=
 //       tshark expected (tshark also flags fast/spurious categories);
 //       tshark < ours is flagged. Flood streams should agree on 0.
+//
+// Layer:     verify — tshark-oracle I/O (conv tables, DNS/HTTP rows, retransmission analysis)
+// Milestone: M3.3 — flow-engine verification harness (docs/history/milestone-3-report.md)
+// Verified:  gates 5 + 8 of `npm run test:all` (14/14 matrix; 3 tap scenarios)
+// Exports:   verifyTrace, parseConvTables, TraceVerify
 
 import fs from "node:fs";
 import path from "node:path";
-import { parsePcapng } from "./pcapng.ts";
-import { canonicalFlow, type DecodedPacket } from "./decoder.ts";
-import { decodeAllPackets, dedupePackets } from "./dedupe.ts";
-import { analyzePcapFile, type FlowAnalysis } from "./flows.ts";
-import { runCommand, tsharkExe } from "./pktmon.ts";
-import { writeClassicPcap, dedupedEthernetChunks } from "./pcapwrite.ts";
+import { parsePcapng } from "../engine/pcapng.ts";
+import { canonicalFlow, type DecodedPacket } from "../engine/decoder.ts";
+import { decodeAllPackets, dedupePackets } from "../engine/dedupe.ts";
+import { analyzePcapFile, type FlowAnalysis } from "../engine/flows.ts";
+import { runCommand, tsharkExe } from "../capture/pktmon.ts";
+import { writeClassicPcap, dedupedEthernetChunks } from "../engine/pcapwrite.ts";
 import { tsharkReadFrames } from "./parity.ts";
 
 export interface ConvRow {
@@ -73,6 +78,8 @@ export interface TraceVerify {
 
 const VALUE = "([\\d.]+)\\s*(bytes|kB|MB|GB)";
 
+/** Parse `tshark -z conv,*` stdout into per-protocol row tables
+ * (bytes/kB/MB/GB unit forms included). */
 export function parseConvTables(stdout: string): TsharkConvTables {
   const tables: TsharkConvTables = { tcp: [], udp: [], ip: [], ipv6: [] };
   let current: keyof TsharkConvTables | null = null;
@@ -309,6 +316,8 @@ function rowForIpPair(
 
 // ---------------------------------------------------------------- verify
 
+/** Run every M3.3 check (conv tables, DNS attribution, HTTP stories,
+ * retransmission) for one trace against tshark. */
 export async function verifyTrace(file: string, cwd: string): Promise<TraceVerify> {
   const checks: CompareResult[] = [];
   const retransTable: Array<{ flow: string; ours: number; tshark: number }> = [];

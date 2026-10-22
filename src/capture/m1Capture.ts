@@ -4,17 +4,22 @@
 // Elevated flow is bundled into ONE UAC prompt per capture run:
 //   non-elevated prechecks -> generate m1.ps1 -> Start-Process -Verb RunAs
 // All pktmon syntax mirrors the pktmon help text captured on this machine
-// (docs/step0-environment.md) plus Microsoft Learn docs; nothing is invented.
+// (docs/history/step0-environment.md) plus Microsoft Learn docs; nothing is invented.
 //
 // The generated script logs one `[STEP <name>] code=<n> <output>` line per
 // command so the orchestrator can print and persist real results.
+//
+// Layer:     capture — orchestration (one elevated bundle per run)
+// Milestone: M1 — capture path (docs/history/milestone-1-report.md)
+// Verified:  real run recorded in the milestone report; output trace cross-checked frame-by-frame (m1-verify)
+// Exports:   m1Capture, parseCaptureLog
 
 import fs from "node:fs";
 import path from "node:path";
 import { runElevatedScript } from "./elevated.ts";
 import { runPktmon } from "./pktmon.ts";
 
-const REPO = path.resolve(import.meta.dirname, "..");
+const REPO = path.resolve(import.meta.dirname, "..", "..");
 const OUT = path.join(REPO, "out");
 
 const P = {
@@ -147,6 +152,9 @@ function captureScript(): string {
   return L.join("\r\n");
 }
 
+/** Run the full M1 capture: non-elevated prechecks, then ONE elevated
+ * bundle (generated m1.ps1) that starts pktmon, runs the exchange, and
+ * exports per-component PCAPNGs. Returns a process exit code. */
 export async function m1Capture(): Promise<number> {
   fs.mkdirSync(OUT, { recursive: true });
   safetyCheckPaths();

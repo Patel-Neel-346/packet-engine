@@ -7,6 +7,11 @@
 // even on loaded traces) = copies of one physical observation. A
 // recent-per-hash map handles flood traffic where many packets separate
 // adjacent copies (the naive 24-group backward scan under-merged under load).
+//
+// Layer:     engine — pure analysis (node:crypto hash only; no fs/net)
+// Milestone: M2 — dedupe rule, shared with the M3 flow engine (docs/history/milestone-2-report.md)
+// Verified:  tolerance cases unit-tested (test/flows.test.ts); drives both the parity metric and the flow unique view
+// Exports:   decodeAllPackets, dedupePackets, ipHash, epbInterfaceLink
 
 import crypto from "node:crypto";
 import type { PcapngFile } from "./pcapng.ts";
@@ -37,6 +42,9 @@ export function decodeAllPackets(parsed: PcapngFile): DecodedPacket[] {
   });
 }
 
+/** sha1 over the IP-level bytes (from ipOffset onward) — identical across
+ * ethernet / raw-802.11 / bare-IP copies of one physical packet; null when
+ * the packet is not IP or its raw bytes are unavailable. */
 export function ipHash(p: DecodedPacket): string | null {
   if (p.ipOffset < 0) return null;
   const buf = (p as unknown as { __bytes?: Buffer }).__bytes;
@@ -44,6 +52,9 @@ export function ipHash(p: DecodedPacket): string | null {
   return crypto.createHash("sha1").update(buf.subarray(p.ipOffset)).digest("hex");
 }
 
+/** Group copies of one physical packet: same ipHash AND capture timestamps
+ * within `toleranceUs` merge into one DuplicateGroup (representative = first
+ * member); every EPB index survives in `members`. */
 export function dedupePackets(
   parsed: PcapngFile,
   decoded: DecodedPacket[],

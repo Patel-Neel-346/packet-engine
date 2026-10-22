@@ -1,6 +1,11 @@
 // CaptureBackend interface — the seam that hides pktmon behind an
 // abstraction so Npcap (or another backend) can be added later without
 // touching the decoder or flow tracking.
+//
+// Layer:     capture — interface layer (types + signal-path contract; no I/O)
+// Milestone: M2 — backend seam (docs/history/milestone-2-report.md)
+// Verified:  implemented by PktmonBackend (produced the whole 14-trace corpus)
+// Exports:   CaptureBackend, CapturePlan, CaptureFilterSpec, ComponentSelection, ScenarioBundle, signalPaths
 
 export interface CaptureFilterSpec {
   /** Filter name (positional). */

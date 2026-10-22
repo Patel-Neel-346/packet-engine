@@ -4,9 +4,9 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { LoopbackTap } from "../src/loopbacktap.ts";
-import { writePcapng, type PcapngChunk } from "../src/pcapngwrite.ts";
-import { parsePcapng, packetTimestampSeconds } from "../src/pcapng.ts";
+import { LoopbackTap } from "../src/tap/loopbacktap.ts";
+import { writePcapng, type PcapngChunk } from "../src/engine/pcapngwrite.ts";
+import { parsePcapng, packetTimestampSeconds } from "../src/engine/pcapng.ts";
 
 test("pcapng writer: SHB+IDB+EPBs roundtrip through parsePcapng", () => {
   const mkFrame = (len: number, fill: number): Buffer => {

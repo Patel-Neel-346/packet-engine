@@ -11,6 +11,11 @@
 //   3. When all plans are done the script writes _bundle.done and exits,
 //      recording its exit code in _bundle.exitcode for the Node side.
 // Every step is logged with its real exit code to <bundleId>.log.
+//
+// Layer:     capture — machine-specific I/O (pktmon bundle scripts)
+// Milestone: M2 — batch capture backend (docs/history/milestone-2-report.md)
+// Verified:  produced the whole 14-trace scenario corpus (core + ext batches)
+// Exports:   PktmonBackend
 
 import fs from "node:fs";
 import path from "node:path";
@@ -44,6 +49,8 @@ function planLiteral(p: CapturePlan): string {
   return `[pscustomobject]@{id=${psString(p.id)};comps=${comps};conv=@(${conv.join(",")});maxMB=${maxMB};timeoutSec=${timeout};filters=@(${filters})}`;
 }
 
+/** CaptureBackend over in-box pktmon: writes the ordered CapturePlans into
+ * one bundle .ps1, runs it elevated, and reports per-plan results. */
 export class PktmonBackend implements CaptureBackend {
   readonly id = "pktmon";
 

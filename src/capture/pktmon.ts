@@ -5,6 +5,11 @@
 //   command string with user input (`exec` is deliberately not used).
 // - Results are returned with exit code + captured stdout/stderr so callers
 //   can record real output instead of assuming success.
+//
+// Layer:     capture — external-process I/O (also used by verify/ and traffic/)
+// Milestone: M1 — process helpers (docs/history/milestone-1-report.md)
+// Verified:  every capture and verification run records these commands' real output
+// Exports:   runCommand, runPktmon, pktmonExe, powershellExe, tsharkExe, CommandResult
 
 import { spawn } from "node:child_process";
 import path from "node:path";
@@ -23,10 +28,12 @@ function systemRoot(): string {
   return process.env.SystemRoot ?? "C:\\Windows";
 }
 
+/** Absolute path to the in-box pktmon.exe under System32. */
 export function pktmonExe(): string {
   return path.join(systemRoot(), "System32", "pktmon.exe");
 }
 
+/** Absolute path to the in-box Windows PowerShell 5.1 executable. */
 export function powershellExe(): string {
   return path.join(
     systemRoot(),
@@ -37,6 +44,7 @@ export function powershellExe(): string {
   );
 }
 
+/** Absolute path of the tshark install recorded in Step 0 (Wireshark 4.6.9). */
 export function tsharkExe(): string {
   return path.join("C:\\Program Files\\Wireshark", "tshark.exe");
 }
@@ -74,6 +82,7 @@ export async function runCommand(
   });
 }
 
+/** Run pktmon.exe with an argv array (see runCommand for the result contract). */
 export function runPktmon(
   args: readonly string[],
   opts?: { timeoutMs?: number },

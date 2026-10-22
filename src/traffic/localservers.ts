@@ -2,6 +2,11 @@
 // plain-HTTP-split, WebSocket-upgrade, and loopback scenarios. Implemented
 // on raw net sockets so SEGMENT SPLITTING is under our control (Node's
 // http module does not split headers).
+//
+// Layer:     traffic — local server I/O (raw net sockets; non-elevated)
+// Milestone: M2 (split-HTTP s2_local_split, WebSocket s13_ws) / M4a (loopback echo s11)
+// Verified:  their traces captured + verified; app-level truth re-checked by the m4a tap gate
+// Exports:   startSplitHttpServer, splitHttpRequest, startWsEchoServer, wsClientUpgrade, udpEchoRound
 
 import net from "node:net";
 import crypto from "node:crypto";

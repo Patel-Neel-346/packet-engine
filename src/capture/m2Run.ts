@@ -3,24 +3,26 @@
 // lock-step via signal files. Afterwards every scenario trace is parsed,
 // deduped and compared against tshark (parity metric), and a summary table
 // is written to test-results/milestone2.md.
+//
+// Layer:     capture — batch orchestration (elevated capture + parity summary)
+// Milestone: M2 — scenario batch runner (docs/history/milestone-2-report.md)
+// Verified:  produced the 14-trace corpus + parity summaries (test-results/milestone2-*.md); writeM2Plan runs offline, no UAC
+// Exports:   runMilestoneBatch, writeM2Plan
 
 import fs from "node:fs";
 import path from "node:path";
 import { PktmonBackend } from "./pktmonBackend.ts";
-import { parsePcapng } from "./pcapng.ts";
+import { parsePcapng } from "../engine/pcapng.ts";
 import {
   coreScenarios,
   extendedScenarios,
   buildPlans,
   type ScenarioDef,
-} from "./scenarios.ts";
-import { buildTrafficContext, type TrafficContext } from "./traffic.ts";
-import { computeParity, tsharkReadFrames, type ParityResult } from "./parity.ts";
+} from "../traffic/scenarios.ts";
+import { buildTrafficContext, type TrafficContext } from "../traffic/traffic.ts";
+import { computeParity, tsharkReadFrames, type ParityResult } from "../verify/parity.ts";
 import { tsharkExe, runCommand } from "./pktmon.ts";
-
-const OUT_DIR = path.resolve("out");
-const SCEN_DIR = path.join(OUT_DIR, "scen");
-const RESULTS_DIR = path.resolve("test-results");
+import { OUT_DIR, SCEN_DIR, RESULTS_DIR } from "../paths.ts";
 
 function waitForFresh(
   file: string,
@@ -166,6 +168,23 @@ function rowLine(row: ScenarioRow): string {
   return `| ${row.id} | ${uniq} | ${dups} | ${parity} | ${unsup} | ${row.capture.epbs} | ${extra} |`;
 }
 
+/** m2-plan: generate the bundle PowerShell script for a batch and write it to
+ * out/scen/m2_<batch>.ps1. Offline, no UAC — nothing is executed. */
+export async function writeM2Plan(which: "core" | "ext"): Promise<number> {
+  const ctx2 = await buildTrafficContext();
+  const scen = which === "core" ? coreScenarios() : extendedScenarios();
+  const be = new PktmonBackend(OUT_DIR, SCEN_DIR);
+  const ps1 = be.buildBundleScript({ bundleId: `m2_${which}`, plans: buildPlans(scen, ctx2) });
+  const file = path.join(SCEN_DIR, `m2_${which}.ps1`);
+  fs.mkdirSync(SCEN_DIR, { recursive: true });
+  fs.writeFileSync(file, ps1, "utf8");
+  console.log(`bundle script written: ${file} (NOT executed)`);
+  return 0;
+}
+
+/** Run a whole M2 batch with ONE elevated bundle: capture every scenario,
+ * then compute the per-trace parity metric and write
+ * test-results/milestone2-<batch>.md. */
 export async function runMilestoneBatch(batch: "core" | "ext"): Promise<void> {
   fs.mkdirSync(SCEN_DIR, { recursive: true });
   fs.mkdirSync(RESULTS_DIR, { recursive: true });

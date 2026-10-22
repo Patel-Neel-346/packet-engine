@@ -2,10 +2,16 @@
 // Builds real DNS wire messages with its own transaction IDs so the
 // capture has deterministic queries to verify: A, AAAA, NXDOMAIN, and
 // DNS over TCP (2-byte length prefix on a TCP/53 socket).
+//
+// Layer:     traffic — DNS client I/O (raw dgram/net sockets; non-elevated)
+// Milestone: M2 — deterministic DNS queries for the s3 scenario (docs/history/milestone-2-report.md)
+// Verified:  s3_dns trace decoded + DNS attribution cross-checked vs tshark in M3.3
+// Exports:   buildDnsQuery, dnsQueryUdp, dnsQueryTcp
 
 import dgram from "node:dgram";
 import net from "node:net";
 
+/** Build a one-question DNS query wire message (RD set, class IN). */
 export function buildDnsQuery(id: number, name: string, qtype: number): Buffer {
   const parts: Buffer[] = [];
   const h = Buffer.alloc(12);
@@ -28,6 +34,8 @@ export function buildDnsQuery(id: number, name: string, qtype: number): Buffer {
   return Buffer.concat(parts);
 }
 
+/** Send one UDP/53 query and wait for the reply with the matching
+ * transaction id (null fields on timeout/error — never throws). */
 export async function dnsQueryUdp(
   server: string,
   name: string,
@@ -58,6 +66,7 @@ export async function dnsQueryUdp(
   });
 }
 
+/** Send one query over TCP/53 with the 2-byte length prefix (RFC 1035 §4.2.2). */
 export async function dnsQueryTcp(
   server: string,
   name: string,

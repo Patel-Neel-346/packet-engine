@@ -1,8 +1,13 @@
 ﻿// M4-c: Export layer — serializes FlowAnalysis to JSON, CSV, or Markdown.
 // Pure TypeScript, no dependencies, no I/O — caller decides where to write.
+//
+// Layer:     reporting — pure serializers (strings out; no I/O)
+// Milestone: M4c — export formats (docs/project-status.md)
+// Verified:  gate 7 of `npm run test:all` (json/csv/md files written + size-checked)
+// Exports:   toJson, toCsv, toMarkdown
 
-import type { FlowAnalysis, Flow } from "./flows.ts";
-import { bytesLabel } from "./flows.ts";
+import type { FlowAnalysis, Flow } from "../engine/flows.ts";
+import { bytesLabel } from "../engine/flows.ts";
 
 // ─── JSON ────────────────────────────────────────────────────────────────────
 

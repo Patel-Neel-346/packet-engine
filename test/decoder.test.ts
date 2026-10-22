@@ -3,8 +3,8 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
-import { decodePacket, flowIdOf, canonicalFlow } from "../src/decoder.ts";
-import type { DecodedPacket } from "../src/decoder.ts";
+import { decodePacket, flowIdOf, canonicalFlow } from "../src/engine/decoder.ts";
+import type { DecodedPacket } from "../src/engine/decoder.ts";
 
 function mac(sep: string): Buffer {
   const b = Buffer.alloc(6);
@@ -345,7 +345,7 @@ test("TLS ClientHello SNI extracted (metadata only)", () => {
   const tls = Buffer.concat([recHeader, hsBody]);
   const frame = eth(ip4("10.0.0.10", "1.2.3.4", 6, tcp(50000, 443, 0x18, tls)));
   const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.transport?.payloadLen > 0, true);
+  assert.equal((r.transport?.payloadLen ?? 0) > 0, true);
   assert.equal(r.tls?.recordVersion, "0301");
   assert.equal(r.tls?.legacyVersion, "0303");
   assert.equal(r.tls?.sni, "example.org");

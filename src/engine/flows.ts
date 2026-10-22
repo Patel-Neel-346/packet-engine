@@ -15,6 +15,11 @@
 // carry no ports (the decoder would mis-read payload bytes as L4 headers),
 // so TCP/UDP fragments are counted separately and reconciled in M3.3.
 // Analysis never throws; problems accumulate in `warnings`.
+//
+// Layer:     engine — pure analysis core (analyzePcapFile adds one fs.readFileSync)
+// Milestone: M3 — flow engine (docs/history/milestone-3-report.md)
+// Verified:  17 unit tests (test/flows.test.ts) + M3.3 matrix 14/14 vs tshark
+// Exports:   buildFlows, analyzePcapFile, bytesLabel, FlowAnalysis/Flow/TcpStory types
 
 import fs from "node:fs";
 import type { PcapngFile } from "./pcapng.ts";
@@ -579,6 +584,8 @@ function parseFlowHttp(flow: Flow): void {
   if (http) flow.http = http;
 }
 
+/** Assemble the full FlowAnalysis (EPB view + deduped unique view) from a
+ * parsed PCAPNG. Never throws; problems accumulate in `warnings`. */
 export function buildFlows(parsed: PcapngFile, fileName: string): FlowAnalysis {
   const warnings: string[] = [];
   const decoded = decodeAllPackets(parsed);
@@ -686,11 +693,13 @@ export function buildFlows(parsed: PcapngFile, fileName: string): FlowAnalysis {
   };
 }
 
+/** Convenience wrapper: read a PCAPNG file from disk and build its flows. */
 export function analyzePcapFile(file: string): FlowAnalysis {
   const parsed = parsePcapng(fs.readFileSync(file));
   return buildFlows(parsed, file);
 }
 
+/** Human-readable byte count ("500B" / "1.5KB" / "1.00MB"). */
 export function bytesLabel(n: number): string {
   if (n < 1024) return `${n}B`;
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)}KB`;

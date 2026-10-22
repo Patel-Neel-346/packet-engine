@@ -8,6 +8,11 @@
 // with linktype Ethernet(1), so a single-linktype pcap is lossless for
 // ethernet-framed members. Non-ethernet duplicates (raw80211-style copies)
 // are skipped by the exporter and reported.
+//
+// Layer:     engine — pure serialization (Buffer out; caller does the I/O)
+// Milestone: M3.3 — deduped-oracle export (docs/history/milestone-3-report.md)
+// Verified:  consumed by the M3.3 retransmission gate — tshark reads its output
+// Exports:   writeClassicPcap, dedupedEthernetChunks, PcapExportChunk
 
 import type { PcapngFile } from "./pcapng.ts";
 import { packetTimestampSeconds } from "./pcapng.ts";
@@ -21,6 +26,8 @@ export interface PcapExportChunk {
 
 const PCAP_MAGIC = 0xa1b2c3d4;
 
+/** Serialize chunks to a classic-libpcap (v2.4) file buffer: one global
+ * header + one record per chunk. */
 export function writeClassicPcap(
   chunks: PcapExportChunk[],
   linkType: number,
