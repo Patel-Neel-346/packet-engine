@@ -1,0 +1,31 @@
+{
+  "name": "strobe-packet-tracker",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Strobe packet-tracking prototype (Windows pktmon capture, PCAPNG decode, flow tracking).",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "m1:capture": "node src/cli.ts m1-capture",
+    "m1:verify": "node src/cli.ts m1-verify",
+    "m1:pick": "node src/cli.ts m1-pick",
+    "m2:plan": "node src/cli.ts m2-plan",
+    "m2:core": "node src/cli.ts m2-core",
+    "m2:ext": "node src/cli.ts m2-ext",
+    "m3:flows": "node src/cli.ts m3-flows",
+    "m3:verify": "node src/cli.ts m3-verify",
+    "m4:report": "node src/cli.ts m4-report",
+    "m4:watch": "node src/cli.ts m4-watch",
+    "m4:export": "node src/cli.ts m4-export",
+    "m4:loopback": "node src/cli.ts m4-loopback",
+    "test:all": "node src/cli.ts test-all",
+    "test": "node --test test/decoder.test.ts test/flows.test.ts test/loopbacktap.test.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0"
+  }
+}
