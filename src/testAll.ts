@@ -2,7 +2,7 @@
 // and writes a consolidated report. This is the single "is the engine still
 // honest?" command:
 //   1. typecheck (tsc --noEmit, whole engine)
-//   2. unit + integration tests (decoder, flows, loopback tap) via Vitest
+//   2. unit + integration tests (decoder, flows, loopback tap) via Jest
 //   3. M1 capture-path cross-check (out/m1.pcapng frame-by-frame vs tshark)
 //   4. M2 parity regression on the 14-trace scenario corpus
 //   5. M3 verification matrix (14/14 conv/DNS/HTTP/retransmission vs tshark)
@@ -103,22 +103,22 @@ export async function runTestAll(): Promise<GateResult[]> {
     return { ok: clean, detail: clean ? "tsc --noEmit clean" : r.stdout.slice(-400) || `exit ${r.code}` };
   });
 
-  // 2. unit + integration tests (Vitest — same suites, structured output)
+  // 2. unit + integration tests (Jest — same suites, structured output)
   gateSync("unit-tests", () => {
-    const vitestBin = path.join("node_modules", "vitest", "vitest.mjs");
+    const jestBin = path.join("node_modules", "jest", "bin", "jest.js");
     const filesFound = ["test/decoder.test.ts", "test/flows.test.ts", "test/loopbacktap.test.ts"]
       .filter((f) => fs.existsSync(f));
     if (filesFound.length === 0) {
       return { ok: false, detail: "no test files found" };
     }
-    // Spawn the vitest CLI directly (bypasses nested-npm noise); fall back to
+    // Spawn the jest CLI directly (bypasses nested-npm noise); fall back to
     // `npm run test` if the binary layout ever changes.
-    const r = fs.existsSync(vitestBin)
-      ? runNode([vitestBin, "run"], "vitest run")
-      : (runNpm("test", "vitest run") ?? { code: 1, stdout: "" });
-    // Vitest summary lines look like:
-    //   Test Files  3 passed (3)
-    //        Tests  36 passed (36)
+    const r = fs.existsSync(jestBin)
+      ? runNode([jestBin], "jest")
+      : (runNpm("test", "jest") ?? { code: 1, stdout: "" });
+    // Jest summary lines look like:
+    //   Test Suites: 3 passed, 3 total
+    //   Tests:       36 passed, 36 total
     // Gate primarily on the exit code (always encodes failures); counts are detail.
     const lastNum = (re: RegExp): number | null => {
       const all = [...r.stdout.matchAll(re)];
@@ -126,7 +126,7 @@ export async function runTestAll(): Promise<GateResult[]> {
     };
     const passed = lastNum(/(\d+)\s+passed/g);
     const failed = lastNum(/(\d+)\s+failed/g);
-    const fileCount = lastNum(/Test Files\s+(\d+)\s+passed/g);
+    const fileCount = lastNum(/Test Suites:\s+(\d+)\s+passed/g);
     const ok = r.code === 0 && (failed === null || failed === 0);
     const counts =
       passed !== null ? `pass=${passed} fail=${failed ?? 0}` : "counts n/a (gated on exit code)";

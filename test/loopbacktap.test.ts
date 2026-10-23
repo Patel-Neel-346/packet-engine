@@ -15,7 +15,7 @@
 //   seq/ack math must be internally consistent so tools like Wireshark agree.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import { LoopbackTap } from "../src/tap/loopbacktap.ts";
 import { writePcapng, type PcapngChunk } from "../src/engine/pcapngwrite.ts";
 import { parsePcapng, packetTimestampSeconds } from "../src/engine/pcapng.ts";
@@ -136,14 +136,16 @@ describe("LoopbackTap: real in-process loopback echo (Finding A end-to-end)", ()
 
     const reply: string = await new Promise((resolve) => {
       const s = net.createConnection({ host: "127.0.0.1", port });
+      // Safety-net timeout must be cleared — an un-cleared timer keeps the
+      // Jest worker's event loop alive after the suite finishes.
+      const bail = setTimeout(() => resolve("timeout"), 4000);
       s.on("connect", () => s.write("unit-test-payload"));
       let buf = Buffer.alloc(0);
       s.on("data", (c: Buffer) => {
         buf = Buffer.concat([buf, c]);
       });
-      s.on("close", () => resolve(buf.toString("utf8")));
-      s.on("error", () => resolve("error"));
-      setTimeout(() => resolve("timeout"), 4000);
+      s.on("close", () => { clearTimeout(bail); resolve(buf.toString("utf8")); });
+      s.on("error", () => { clearTimeout(bail); resolve("error"); });
     });
 
     // Sanity BEFORE the tap analysis: the app-level echo itself worked.

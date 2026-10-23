@@ -17,7 +17,7 @@
 //   • non-IP traffic          → ARP stays on the L2 path (Finding A territory)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import { decodePacket, flowIdOf, canonicalFlow } from "../src/engine/decoder.ts";
 import type { DecodedPacket } from "../src/engine/decoder.ts";
 

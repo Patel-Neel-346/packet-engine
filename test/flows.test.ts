@@ -1,30 +1,30 @@
-﻿// ─────────────────────────────────────────────────────────────────────────────
-// FLOW-ENGINE SUITE — src/engine/flows.ts + src/engine/dedupe.ts
+// -----------------------------------------------------------------------------
+// FLOW-ENGINE SUITE � src/engine/flows.ts + src/engine/dedupe.ts
 // Run:  npm test           (one-shot)      npm run test:watch   (live)
 //
-// Synthetic packets ONLY — no tshark, no elevation, no files on disk. Every
+// Synthetic packets ONLY � no tshark, no elevation, no files on disk. Every
 // suite builds frames byte-by-byte (builders below) and feeds them straight
 // into buildFlows/dedupePackets, so a failure points at engine logic, not
 // capture tooling.
 //
-// Coverage map (numbered claim → suite below):
-//   1. sparse-stream reassembly      → "TCP stream reassembly"
-//   2. TCP lifecycle story           → "TCP lifecycle story"
-//   3. HTTP/1.x parsing              → "HTTP story"
-//   4. DNS attribution               → "DNS attribution"
-//   5. ICMP port-less flows          → "UDP & ICMP flows"
-//   6. dedupe tolerance window       → "dedupe"
-//   7. bytesLabel formatting         → "bytesLabel"
-//   8. out-of-order segments         → "TCP stream reassembly"
-//   9. retransmission detection      → "TCP stream reassembly"
-//  11. fragment / non-IP / empty-trace accounting → "accounting edges"
-// ─────────────────────────────────────────────────────────────────────────────
+// Coverage map (numbered claim ? suite below):
+//   1. sparse-stream reassembly      ? "TCP stream reassembly"
+//   2. TCP lifecycle story           ? "TCP lifecycle story"
+//   3. HTTP/1.x parsing              ? "HTTP story"
+//   4. DNS attribution               ? "DNS attribution"
+//   5. ICMP port-less flows          ? "UDP & ICMP flows"
+//   6. dedupe tolerance window       ? "dedupe"
+//   7. bytesLabel formatting         ? "bytesLabel"
+//   8. out-of-order segments         ? "TCP stream reassembly"
+//   9. retransmission detection      ? "TCP stream reassembly"
+//  11. fragment / non-IP / empty-trace accounting ? "accounting edges"
+// -----------------------------------------------------------------------------
 
-import { describe, it, expect } from "vitest";
+import { describe, it, expect } from "@jest/globals";
 import { buildFlows, bytesLabel } from "../src/engine/flows.ts";
 import { dedupePackets, decodeAllPackets } from "../src/engine/dedupe.ts";
 
-// ── inline fixture builders ──────────────────────────────────────────────────
+// -- inline fixture builders --------------------------------------------------
 
 function ethHdr(ethertype: number) {
   const h = Buffer.alloc(14);
@@ -92,7 +92,7 @@ function makePcap(frames: Buffer[], tsGapUs = 1000) {
 
 const SYN = 0x02, FIN = 0x01, RST = 0x04, ACK = 0x10, PSH = 0x08;
 
-// ── suites ───────────────────────────────────────────────────────────────────
+// -- suites -------------------------------------------------------------------
 
 describe("bytesLabel", () => {
   it("formats 0B / B / KB / MB with the SI-scaled scheme used in reports", () => {
@@ -105,7 +105,7 @@ describe("bytesLabel", () => {
 });
 
 describe("TCP lifecycle story", () => {
-  it("a clean handshake→data→FIN connection sets handshakeComplete and both FINs, with no RST", () => {
+  it("a clean handshake?data?FIN connection sets handshakeComplete and both FINs, with no RST", () => {
     const pkts = [
       tcpPkt('10.0.0.1', 1000, '10.0.0.2', 80, SYN, 0, 0),
       tcpPkt('10.0.0.2', 80, '10.0.0.1', 1000, SYN|ACK, 0, 1),
@@ -125,8 +125,8 @@ describe("TCP lifecycle story", () => {
     expect(t.handshakeComplete).toBe(true);
     expect(t.finA2b).toBeTruthy();        // FIN a->b
     expect(t.finB2a).toBeTruthy();        // FIN b->a
-    expect(t.rst).toBeFalsy();            // no RST — clean close only
-    // 10.0.0.1 < 10.0.0.2 so a=10.0.0.1:1000 → a2b carries 'hello'
+    expect(t.rst).toBeFalsy();            // no RST � clean close only
+    // 10.0.0.1 < 10.0.0.2 so a=10.0.0.1:1000 ? a2b carries 'hello'
     const a2b = t.a2b;
     expect(a2b).toBeTruthy();
     expect(a2b!.gapCount).toBe(0);
@@ -189,7 +189,7 @@ describe("TCP stream reassembly", () => {
     const s = a.flows[0].tcp!.a2b!;
     expect(s.gapCount).toBe(1);
     expect(s.gapBytes).toBe(5);
-    // AAAAA [00000] BBBBB — the gap is visible, not silently skipped
+    // AAAAA [00000] BBBBB � the gap is visible, not silently skipped
     expect(s.bytes.length).toBe(15);
     expect(s.bytes.subarray(0, 5).toString()).toBe('AAAAA');
     expect([...s.bytes.subarray(5, 10)]).toEqual([0, 0, 0, 0, 0]);
@@ -199,7 +199,7 @@ describe("TCP stream reassembly", () => {
   it("a fully-covered retransmitted segment counts once in retransSegs (dedupe uses 5000us spacing)", () => {
     const payload = Buffer.from('data');
     // 5000 us spacing so the byte-identical retransmit is NOT merged as a
-    // duplicate capture copy (dedupe tolerance is 2000 us) — it must instead
+    // duplicate capture copy (dedupe tolerance is 2000 us) � it must instead
     // surface as a real retransmission story.
     const pkts = [
       tcpPkt('2.0.0.1', 3000, '2.0.0.2', 80, SYN, 0, 0),
@@ -292,7 +292,7 @@ describe("HTTP story", () => {
 
 describe("DNS attribution", () => {
   it("an A record maps the answered IP to the queried name (dnsHostByIp)", () => {
-    // Hand-built response: example.com → 93.184.216.34
+    // Hand-built response: example.com ? 93.184.216.34
     const name = 'example.com';
     const labels = name.split('.').map(l => Buffer.concat([Buffer.from([l.length]), Buffer.from(l)]));
     const nameBuf = Buffer.concat([...labels, Buffer.from([0])]);
@@ -341,8 +341,8 @@ describe("dedupe (capture-copy collapsing)", () => {
 describe("accounting edges (fragments, non-IP, empty traces)", () => {
   it("victim of fragmentation: a non-first IPv4 fragment goes to fragments[], NOT flows[]", () => {
     const fragPayload = Buffer.alloc(20);
-    // frag offset 1480/8=185 → this fragment starts at byte 1480; no
-    // first-fragment seen ⇒ must not be keyed to any flow.
+    // frag offset 1480/8=185 ? this fragment starts at byte 1480; no
+    // first-fragment seen ? must not be keyed to any flow.
     const ip = ip4Hdr('7.0.0.1', '7.0.0.2', 6, fragPayload.length, 0xabcd, 0, 1480 / 8);
     const pkt = Buffer.concat([ethHdr(0x0800), ip, fragPayload]);
     const a = buildFlows(makePcap([pkt]), 't');

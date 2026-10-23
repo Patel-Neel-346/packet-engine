@@ -369,7 +369,7 @@ openable in Wireshark/tshark.
 ### Regression gates re-run after M4a landed
 
 - `npm run typecheck` — clean.
-- `npm test` — **36/36 via Vitest** (16 decoder + 17 flows + 3 tap; watch: `npm run test:watch`).
+- `npm test` — **36/36 via Jest** (16 decoder + 17 flows + 3 tap; watch: `npm run test:watch`).
 - `node src\cli.ts m3-verify` — **14/14 fully pass** (M3 matrix unchanged;
   the HTTP orientation fix below did not perturb the M2/M3 corpus).
 - `node out\scen\reverify_parity.ts` — 13×100% + s10 14.3% by-design (unchanged).
