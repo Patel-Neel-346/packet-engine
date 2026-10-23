@@ -33,70 +33,88 @@ export interface LocalHttpResult {
  *   - `/`       -> 200 OK with small body
  *   - `/big/<n>` -> 200 OK with <n> bytes of body payload
  */
-export function startSplitHttpServer(host: string, port: number): Promise<LocalHttpResult> {
-  return new Promise((resolve, reject) => {
-    const server = net.createServer((socket) => {
-      socket.setNoDelay(true);
-      let req = Buffer.alloc(0);
+export async function startSplitHttpServer(
+  host: string,
+  port: number,
+  maxRetries = 10,
+): Promise<LocalHttpResult> {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await new Promise<LocalHttpResult>((resolve, reject) => {
+        const server = net.createServer((socket) => {
+          socket.setNoDelay(true);
+          let req = Buffer.alloc(0);
 
-      socket.on("data", async (chunk: Buffer) => {
-        req = Buffer.concat([req, chunk]);
-        if (req.length > 65536) {
-          socket.destroy();
-          return;
-        }
+          socket.on("data", async (chunk: Buffer) => {
+            req = Buffer.concat([req, chunk]);
+            if (req.length > 65536) {
+              socket.destroy();
+              return;
+            }
 
-        const endOfHead = req.indexOf("\r\n\r\n");
-        if (endOfHead === -1) return;
+            const endOfHead = req.indexOf("\r\n\r\n");
+            if (endOfHead === -1) return;
 
-        const head = req.subarray(0, endOfHead).toString("utf8");
-        const match = /^GET ([^ ]+) HTTP\/1\.[01]/.exec(head);
-        const reqPath = match ? match[1] : "/";
+            const head = req.subarray(0, endOfHead).toString("utf8");
+            const match = /^GET ([^ ]+) HTTP\/1\.[01]/.exec(head);
+            const reqPath = match ? match[1] : "/";
 
-        if (reqPath.startsWith("/big/")) {
-          const bodySize = Math.min(16_000_000, Math.max(1, Number(reqPath.slice(5)) || 0));
-          const body = Buffer.alloc(bodySize, 0x61);
-          const headerPart1 = `HTTP/1.1 200 OK\r\nContent-Length: ${bodySize}\r\n`;
-          const headerPart2 = "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n";
+            if (reqPath.startsWith("/big/")) {
+              const bodySize = Math.min(16_000_000, Math.max(1, Number(reqPath.slice(5)) || 0));
+              const body = Buffer.alloc(bodySize, 0x61);
+              const headerPart1 = `HTTP/1.1 200 OK\r\nContent-Length: ${bodySize}\r\n`;
+              const headerPart2 =
+                "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n";
 
-          // Write header part 1 immediately
-          socket.write(headerPart1);
+              // Write header part 1 immediately
+              socket.write(headerPart1);
 
-          // Write header part 2 and body after small intentional delays to split TCP segments
-          setTimeout(() => {
-            socket.write(headerPart2);
+              // Write header part 2 and body after small intentional delays to split TCP segments
+              setTimeout(() => {
+                socket.write(headerPart2);
+                setTimeout(() => {
+                  socket.write(body);
+                }, 8);
+              }, 8);
+
+              return;
+            }
+
+            // Standard small body path
+            const body = `plain-http-split-ok ${crypto.randomBytes(8).toString("hex")}`;
+            const headerPart1 = "HTTP/1.1 200 OK\r\n";
+            const headerPart2 =
+              `X-Test-Server: split\r\nContent-Type: text/plain\r\nConnection: close\r\n` +
+              `Content-Length: ${body.length}\r\n\r\n${body}`;
+
+            socket.write(headerPart1);
             setTimeout(() => {
-              socket.write(body);
-            }, 8);
-          }, 8);
+              socket.write(headerPart2);
+              socket.end();
+            }, 12);
+          });
 
-          return;
-        }
+          socket.on("error", () => {
+            // Suppress expected client teardown errors
+          });
+        });
 
-        // Standard small body path
-        const body = `plain-http-split-ok ${crypto.randomBytes(8).toString("hex")}`;
-        const headerPart1 = "HTTP/1.1 200 OK\r\n";
-        const headerPart2 =
-          `X-Test-Server: split\r\nContent-Type: text/plain\r\nConnection: close\r\n` +
-          `Content-Length: ${body.length}\r\n\r\n${body}`;
-
-        socket.write(headerPart1);
-        setTimeout(() => {
-          socket.write(headerPart2);
-          socket.end();
-        }, 12);
+        server.once("error", (err: Error) => reject(err));
+        server.listen(port, host, () => {
+          resolve({ port, server });
+        });
       });
-
-      socket.on("error", () => {
-        // Suppress expected client teardown errors
-      });
-    });
-
-    server.once("error", (err: Error) => reject(new Error(`split-http: ${err.message}`)));
-    server.listen(port, host, () => {
-      resolve({ port, server });
-    });
-  });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "EADDRINUSE" && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`split-http: ${msg}`);
+    }
+  }
+  throw new Error(`split-http: timed out trying to bind ${host}:${port}`);
 }
 
 /**
@@ -159,57 +177,71 @@ export function splitHttpRequest(
  * Minimal RFC 6455 WebSocket echo server over raw TCP.
  * Accepts handshake upgrade, sends server greeting frame, echoes client frame, and terminates.
  */
-export function startWsEchoServer(
+export async function startWsEchoServer(
   host: string,
   port: number,
+  maxRetries = 10,
 ): Promise<{ port: number; server: net.Server }> {
   const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 
-  return new Promise((resolve, reject) => {
-    const server = net.createServer((socket) => {
-      socket.setNoDelay(true);
-      let req = Buffer.alloc(0);
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await new Promise((resolve, reject) => {
+        const server = net.createServer((socket) => {
+          socket.setNoDelay(true);
+          let req = Buffer.alloc(0);
 
-      socket.on("data", (chunk: Buffer) => {
-        req = Buffer.concat([req, chunk]);
-        const endOfHead = req.indexOf("\r\n\r\n");
-        if (endOfHead === -1) return;
+          socket.on("data", (chunk: Buffer) => {
+            req = Buffer.concat([req, chunk]);
+            const endOfHead = req.indexOf("\r\n\r\n");
+            if (endOfHead === -1) return;
 
-        const headerStr = req.subarray(0, endOfHead).toString("ascii");
-        if (!headerStr.startsWith("GET")) return;
+            const headerStr = req.subarray(0, endOfHead).toString("ascii");
+            if (!headerStr.startsWith("GET")) return;
 
-        const keyMatch = /sec-websocket-key: ([^\r\n]+)/i.exec(headerStr);
-        if (!keyMatch) {
-          socket.destroy();
-          return;
-        }
+            const keyMatch = /sec-websocket-key: ([^\r\n]+)/i.exec(headerStr);
+            if (!keyMatch) {
+              socket.destroy();
+              return;
+            }
 
-        const secWebSocketAccept = crypto
-          .createHash("sha1")
-          .update(keyMatch[1].trim() + WS_GUID)
-          .digest("base64");
+            const secWebSocketAccept = crypto
+              .createHash("sha1")
+              .update(keyMatch[1].trim() + WS_GUID)
+              .digest("base64");
 
-        // Send 101 Switching Protocols response
-        socket.write(
-          "HTTP/1.1 101 Switching Protocols\r\n" +
-            "Upgrade: websocket\r\n" +
-            "Connection: Upgrade\r\n" +
-            `Sec-WebSocket-Accept: ${secWebSocketAccept}\r\n\r\n`,
-        );
+            // Send 101 Switching Protocols response
+            socket.write(
+              "HTTP/1.1 101 Switching Protocols\r\n" +
+                "Upgrade: websocket\r\n" +
+                "Connection: Upgrade\r\n" +
+                `Sec-WebSocket-Accept: ${secWebSocketAccept}\r\n\r\n`,
+            );
 
-        // Server hello text frame: FIN(0x80)|TEXT(0x01), length 5, payload "hello"
-        socket.write(Buffer.from([0x81, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f]));
-        socket.end();
+            // Server hello text frame: FIN(0x80)|TEXT(0x01), length 5, payload "hello"
+            socket.write(Buffer.from([0x81, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f]));
+            socket.end();
+          });
+
+          socket.on("error", () => {
+            // Ignore connection teardown errors
+          });
+        });
+
+        server.once("error", (err: Error) => reject(err));
+        server.listen(port, host, () => resolve({ port, server }));
       });
-
-      socket.on("error", () => {
-        // Ignore connection teardown errors
-      });
-    });
-
-    server.once("error", (err: Error) => reject(new Error(`ws-echo: ${err.message}`)));
-    server.listen(port, host, () => resolve({ port, server }));
-  });
+    } catch (err: unknown) {
+      const code = (err as { code?: string })?.code;
+      if (code === "EADDRINUSE" && attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 200));
+        continue;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      throw new Error(`ws-echo: ${msg}`);
+    }
+  }
+  throw new Error(`ws-echo: timed out trying to bind ${host}:${port}`);
 }
 
 /**

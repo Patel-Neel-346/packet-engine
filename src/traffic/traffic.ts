@@ -189,7 +189,8 @@ export async function localHttpScenario(ctx: TrafficContext): Promise<TrafficRes
   const hosts = ["127.0.0.1", ctx.localIp];
   for (const host of hosts) {
     try {
-      await startSplitHttpServer(host, ctx.httpPort).then((h) => h.server.close());
+      const h = await startSplitHttpServer(host, ctx.httpPort);
+      await new Promise<void>((done) => h.server.close(() => done()));
       note(res, `split-http server bound on ${host}:${ctx.httpPort}`);
     } catch (e) {
       note(res, `split-http server bind FAILED on ${host}: ${String(e).slice(0, 100)}`);
@@ -197,34 +198,32 @@ export async function localHttpScenario(ctx: TrafficContext): Promise<TrafficRes
   }
   // Start one server on loopback, run two clients (response split + request split).
   try {
-    await startSplitHttpServer("127.0.0.1", ctx.httpPort).then(async (h) => {
-      const a = await splitHttpRequest("127.0.0.1", ctx.httpPort, "/");
-      rec(
-        res,
-        `local_http_loopback_client1`,
-        a.status === "200" ? 0 : 1,
-        `status=${a.status} bytes=${a.bytes}`,
-      );
-      const b = await splitHttpRequest("127.0.0.1", ctx.httpPort, "/big/4096");
-      rec(res, `local_http_loopback_client2_big`, 0, `status=${b.status} bytes=${b.bytes}`);
-      h.server.close();
-    });
+    const h = await startSplitHttpServer("127.0.0.1", ctx.httpPort);
+    const a = await splitHttpRequest("127.0.0.1", ctx.httpPort, "/");
+    rec(
+      res,
+      `local_http_loopback_client1`,
+      a.status === "200" ? 0 : 1,
+      `status=${a.status} bytes=${a.bytes}`,
+    );
+    const b = await splitHttpRequest("127.0.0.1", ctx.httpPort, "/big/4096");
+    rec(res, `local_http_loopback_client2_big`, 0, `status=${b.status} bytes=${b.bytes}`);
+    await new Promise<void>((done) => h.server.close(() => done()));
   } catch (e) {
     rec(res, `local_http_loopback`, 1, String(e).slice(0, 120));
   }
   // Same against the machine's site IP (still loopback semantics on Windows,
   // but exercises the "local IP destination" path).
   try {
-    await startSplitHttpServer(ctx.localIp, ctx.httpPort - 1).then(async (h) => {
-      const a = await splitHttpRequest(ctx.localIp, ctx.httpPort - 1, "/");
-      rec(
-        res,
-        `local_http_siteip_client`,
-        a.status === "200" ? 0 : 1,
-        `status=${a.status} bytes=${a.bytes}`,
-      );
-      h.server.close();
-    });
+    const h = await startSplitHttpServer(ctx.localIp, ctx.httpPort - 1);
+    const a = await splitHttpRequest(ctx.localIp, ctx.httpPort - 1, "/");
+    rec(
+      res,
+      `local_http_siteip_client`,
+      a.status === "200" ? 0 : 1,
+      `status=${a.status} bytes=${a.bytes}`,
+    );
+    await new Promise<void>((done) => h.server.close(() => done()));
   } catch (e) {
     rec(res, `local_http_siteip`, 1, String(e).slice(0, 120));
   }
