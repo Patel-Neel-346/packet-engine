@@ -318,7 +318,7 @@ function rowForIpPair(
 
 /** Run every M3.3 check (conv tables, DNS attribution, HTTP stories,
  * retransmission) for one trace against tshark. */
-export async function verifyTrace(file: string, cwd: string): Promise<TraceVerify> {
+export async function verifyTrace(file: string, cwd: string = process.cwd()): Promise<TraceVerify> {
   const checks: CompareResult[] = [];
   const retransTable: Array<{ flow: string; ours: number; tshark: number }> = [];
   const base = path.basename(file);

@@ -103,6 +103,8 @@ export async function runTestAll(): Promise<GateResult[]> {
     return { ok: clean, detail: clean ? "tsc --noEmit clean" : r.stdout.slice(-400) || `exit ${r.code}` };
   });
 
+  let jestVerboseOutput = "";
+
   // 2. unit + integration tests (Jest — same suites, structured output)
   gateSync("unit-tests", () => {
     const jestBin = path.join("node_modules", "jest", "bin", "jest.js");
@@ -114,11 +116,15 @@ export async function runTestAll(): Promise<GateResult[]> {
     // Spawn the jest CLI directly (bypasses nested-npm noise); fall back to
     // `npm run test` if the binary layout ever changes.
     const r = fs.existsSync(jestBin)
-      ? runNode([jestBin], "jest")
-      : (runNpm("test", "jest") ?? { code: 1, stdout: "" });
+      ? runNode([jestBin, "--verbose"], "jest --verbose")
+      : (runNpm("test", "jest --verbose") ?? { code: 1, stdout: "" });
+    jestVerboseOutput = r.stdout;
+    if (r.stdout) {
+      console.log("\n" + r.stdout.trim() + "\n");
+    }
     // Jest summary lines look like:
-    //   Test Suites: 3 passed, 3 total
-    //   Tests:       36 passed, 36 total
+    //   Test Suites: 13 passed, 13 total
+    //   Tests:       204 passed, 204 total
     // Gate primarily on the exit code (always encodes failures); counts are detail.
     const lastNum = (re: RegExp): number | null => {
       const all = [...r.stdout.matchAll(re)];
@@ -228,6 +234,29 @@ export async function runTestAll(): Promise<GateResult[]> {
   }
   lines.push("");
   lines.push(allOk ? "**ALL GATES PASS**" : `**${missed.length} GATE(S) FAILED**: ${missed.map((m) => m.name).join(", ")}`);
+
+  if (jestVerboseOutput) {
+    lines.push("");
+    lines.push("## Case-by-Case Test Breakdown");
+    lines.push("");
+    const suiteLines = jestVerboseOutput.split("\n");
+    for (const rawLine of suiteLines) {
+      const line = rawLine.trim();
+      if (rawLine.startsWith("PASS ") || rawLine.startsWith("FAIL ")) {
+        const currentSuite = rawLine.replace(/^(PASS|FAIL)\s+/, "").trim();
+        lines.push("");
+        lines.push(`### ${rawLine.startsWith("PASS") ? "✅ PASS" : "❌ FAIL"}: \`${currentSuite}\``);
+        lines.push("");
+      } else if (line.startsWith("√ ") || line.startsWith("✔ ")) {
+        lines.push(`- [x] ${line.replace(/^[√✔]\s*/, "")}`);
+      } else if (line.startsWith("× ") || line.startsWith("✖ ")) {
+        lines.push(`- [ ] ❌ ${line.replace(/^[×✖]\s*/, "")}`);
+      } else if (line.startsWith("○ ")) {
+        lines.push(`- [ ] ⚠️ (skipped) ${line.replace(/^[○]\s*/, "")}`);
+      }
+    }
+  }
+
   fs.mkdirSync("test-results", { recursive: true });
   fs.writeFileSync(path.join("test-results", "test-all.md"), lines.join("\n"));
 

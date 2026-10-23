@@ -16,6 +16,7 @@
 /** @type {import('jest').Config} */
 module.exports = {
   testEnvironment: "node",
+  verbose: true,
   testMatch: ["<rootDir>/test/**/*.test.ts"],
   transform: {
     "^.+\\.ts$": [
