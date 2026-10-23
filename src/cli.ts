@@ -21,7 +21,12 @@ import { runMilestoneBatch, writeM2Plan } from "./capture/m2Run.ts";
 import { m1Verify } from "./verify/m1Verify.ts";
 import { runM3Matrix } from "./verify/m3Matrix.ts";
 import { printFlowStories } from "./reporting/flowStories.ts";
-import { scanAndReportAll, watchDirectory, printConsoleSummary } from "./reporting/watch.ts";
+import {
+  scanAndReportAll,
+  watchDirectory,
+  printConsoleSummary,
+  openInBrowser,
+} from "./reporting/watch.ts";
 import { toJson, toCsv, toMarkdown } from "./reporting/export.ts";
 import { analyzePcapFile } from "./engine/flows.ts";
 import { runM4Loopback, printM4Loopback } from "./tap/m4Loopback.ts";
@@ -55,11 +60,21 @@ async function main(): Promise<number> {
     case "m3-verify":
       return runM3Matrix();
     case "m4-report": {
-      const dir = process.argv[3] ?? "out/scen";
-      const reportDir = process.argv[4] ?? path.join("out", "m4-reports");
+      const open = process.argv.includes("--open");
+      const positional = process.argv.slice(3).filter((a) => !a.startsWith("--"));
+      const dir = positional[0] ?? "out/scen";
+      const reportDir = positional[1] ?? path.join("out", "m4-reports");
       const summaries = scanAndReportAll(dir, reportDir);
       printConsoleSummary(summaries);
-      console.log(`dashboard: ${path.join(reportDir, "index.html")}`);
+      const indexPath = path.join(reportDir, "index.html");
+      const absPath = path.resolve(indexPath);
+      const fileUrl = `file:///${absPath.replace(/\\/g, "/")}`;
+      console.log(`\nDashboard: ${indexPath}`);
+      console.log(`Clickable Link: ${fileUrl}\n`);
+      if (open) {
+        console.log(`Opening dashboard in default browser...`);
+        openInBrowser(indexPath);
+      }
       return summaries.length > 0 ? 0 : 1;
     }
     case "m4-watch": {

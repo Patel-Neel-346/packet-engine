@@ -17,6 +17,8 @@
     "m3:flows": "node src/cli.ts m3-flows",
     "m3:verify": "node src/cli.ts m3-verify",
     "m4:report": "node src/cli.ts m4-report",
+    "m4:open": "node src/cli.ts m4-report --open",
+    "dashboard": "node src/cli.ts m4-report --open",
     "m4:watch": "node src/cli.ts m4-watch",
     "m4:export": "node src/cli.ts m4-export",
     "m4:loopback": "node src/cli.ts m4-loopback",
