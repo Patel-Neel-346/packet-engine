@@ -54,28 +54,28 @@ Three properties make this prototype verifiable rather than merely working:
 2. **Nothing is trusted without an oracle.** Frames (M1), a 21-column
    per-packet parity metric (M2), and conversation/DNS/HTTP/retransmission
    checks (M3) are compared against real tshark output; packets the engine
-   cannot decode count as *unsupported*, never as matches.
+   cannot decode count as _unsupported_, never as matches.
 3. **One command re-proves everything.** `npm run test:all` runs all 8
    verification gates in ~45 s, offline, no UAC.
 
 ## Milestone status
 
-| Milestone | Status | Score |
-|---|---|---|
-| M1 — capture path | **DONE** | 100% |
-| M2 — decode + parity vs tshark | **DONE** | 9/9 core scenarios 100% parity |
-| M3 — flow engine + TCP reassembly | **DONE** | 14/14 traces fully pass all checks |
-| M4 — engine ergonomics (dashboard/watch/export) | **DONE — verified & wired** | 67 traces → dashboard; json/csv/md exports content-checked vs known values |
-| M4a — loopback vantage (userspace tap) | **DONE — Finding A closed** | 3 local scenarios: 22 in-tap checks ALL PASS + tshark full gate on all 3 synthesized traces |
+| Milestone                                       | Status                      | Score                                                                                       |
+| ----------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
+| M1 — capture path                               | **DONE**                    | 100%                                                                                        |
+| M2 — decode + parity vs tshark                  | **DONE**                    | 9/9 core scenarios 100% parity                                                              |
+| M3 — flow engine + TCP reassembly               | **DONE**                    | 14/14 traces fully pass all checks                                                          |
+| M4 — engine ergonomics (dashboard/watch/export) | **DONE — verified & wired** | 67 traces → dashboard; json/csv/md exports content-checked vs known values                  |
+| M4a — loopback vantage (userspace tap)          | **DONE — Finding A closed** | 3 local scenarios: 22 in-tap checks ALL PASS + tshark full gate on all 3 synthesized traces |
 
 ## Prerequisites
 
-| Item | Required version | License | Purpose |
-|---|---|---|---|
-| Windows | 10.0.19041+ (tested on 10.0.26200) | - | in-box pktmon |
-| Node.js | >= 24 (tested v24.12.0) | MIT | engine + CLI |
-| tshark (Wireshark) | tested 4.6.9 | GPL | independent verifier only |
-| Administrator | session UAC approval once per capture | - | pktmon driver access |
+| Item               | Required version                      | License | Purpose                   |
+| ------------------ | ------------------------------------- | ------- | ------------------------- |
+| Windows            | 10.0.19041+ (tested on 10.0.26200)    | -       | in-box pktmon             |
+| Node.js            | >= 24 (tested v24.12.0)               | MIT     | engine + CLI              |
+| tshark (Wireshark) | tested 4.6.9                          | GPL     | independent verifier only |
+| Administrator      | session UAC approval once per capture | -       | pktmon driver access      |
 
 - No third-party runtime dependencies; dev deps: `typescript`, `@types/node`.
 - Node >= 24 runs `.ts` directly (type stripping) — there is **no build step**.
@@ -103,51 +103,51 @@ prompt for the whole run; `none` = fully offline and non-elevated.
 
 ### Verification
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run test:all` | all 8 gates in sequence; exit 0 only when all pass; writes `test-results\test-all.md` | none |
-| `npm run typecheck` | `tsc --noEmit` over `src/**` + `test/**` | none |
-| `npm test` | Jest run: 36 tests in 3 structured suites (16 decoder + 17 flows + 3 loopback tap) | none |
-| `npm run test:watch` | Jest watch mode — re-runs only affected tests as you edit | none |
-| `npm run test:coverage` | Istanbul coverage report (`jest --coverage`, built in) | none |
+| Command                 | What it does                                                                          | Elevation |
+| ----------------------- | ------------------------------------------------------------------------------------- | --------- |
+| `npm run test:all`      | all 8 gates in sequence; exit 0 only when all pass; writes `test-results\test-all.md` | none      |
+| `npm run typecheck`     | `tsc --noEmit` over `src/**` + `test/**`                                              | none      |
+| `npm test`              | Jest run: 36 tests in 3 structured suites (16 decoder + 17 flows + 3 loopback tap)    | none      |
+| `npm run test:watch`    | Jest watch mode — re-runs only affected tests as you edit                             | none      |
+| `npm run test:coverage` | Istanbul coverage report (`jest --coverage`, built in)                                | none      |
 
 ### M1 — capture path
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run m1:capture` | elevated pktmon capture bundle — prechecks, one generated `.ps1`, ETL → etl2pcap | 1 UAC |
-| `npm run m1:pick` | select the best per-component trace → `out\m1.pcapng` | none |
-| `npm run m1:verify` | cross-check `out\m1.pcapng` frame-by-frame vs tshark | none |
+| Command              | What it does                                                                     | Elevation |
+| -------------------- | -------------------------------------------------------------------------------- | --------- |
+| `npm run m1:capture` | elevated pktmon capture bundle — prechecks, one generated `.ps1`, ETL → etl2pcap | 1 UAC     |
+| `npm run m1:pick`    | select the best per-component trace → `out\m1.pcapng`                            | none      |
+| `npm run m1:verify`  | cross-check `out\m1.pcapng` frame-by-frame vs tshark                             | none      |
 
 ### M2 — decoder + parity
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run m2:plan` | generate + syntax-check the M2 bundle script (offline dry-run) | none |
-| `npm run m2:core` | Milestone 2 CORE scenarios (9) — live capture, decode, parity vs tshark | 1 UAC, ~5 min |
-| `npm run m2:ext` | Milestone 2 EXTENDED scenarios (6) — live capture, decode, parity vs tshark | 1 UAC |
+| Command           | What it does                                                                | Elevation     |
+| ----------------- | --------------------------------------------------------------------------- | ------------- |
+| `npm run m2:plan` | generate + syntax-check the M2 bundle script (offline dry-run)              | none          |
+| `npm run m2:core` | Milestone 2 CORE scenarios (9) — live capture, decode, parity vs tshark     | 1 UAC, ~5 min |
+| `npm run m2:ext`  | Milestone 2 EXTENDED scenarios (6) — live capture, decode, parity vs tshark | 1 UAC         |
 
 ### M3 — flow engine
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run m3:verify` | full matrix: 14/14 traces fully pass vs tshark (conv/DNS/HTTP/retrans) | none |
-| `npm run m3:flows <trace>` | print the flow story for one trace, e.g. `npm run m3:flows out\scen\s1_https_all.pcapng` or `npm run m3:flows out\scen\s12_retrans_all.pcapng` | none |
+| Command                    | What it does                                                                                                                                   | Elevation |
+| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `npm run m3:verify`        | full matrix: 14/14 traces fully pass vs tshark (conv/DNS/HTTP/retrans)                                                                         | none      |
+| `npm run m3:flows <trace>` | print the flow story for one trace, e.g. `npm run m3:flows out\scen\s1_https_all.pcapng` or `npm run m3:flows out\scen\s12_retrans_all.pcapng` | none      |
 
 ### M4 — engine ergonomics
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run m4:report` | analyze `out\scen` → `out\m4-reports\index.html` dashboard + per-trace HTML reports (67 traces); explicit dirs: `npm run m4:report out\scen out\m4-reports` | none |
-| `npm run m4:watch` | same, then regenerate the dashboard when traces change (Ctrl+C to stop) | none |
-| `npm run m4:export <trace> <fmt>` | one-trace exports — `json` \| `csv` \| `md`, e.g. `npm run m4:export out\scen\s3_dns_all.pcapng md` | none |
+| Command                           | What it does                                                                                                                                                | Elevation |
+| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `npm run m4:report`               | analyze `out\scen` → `out\m4-reports\index.html` dashboard + per-trace HTML reports (67 traces); explicit dirs: `npm run m4:report out\scen out\m4-reports` | none      |
+| `npm run m4:watch`                | same, then regenerate the dashboard when traces change (Ctrl+C to stop)                                                                                     | none      |
+| `npm run m4:export <trace> <fmt>` | one-trace exports — `json` \| `csv` \| `md`, e.g. `npm run m4:export out\scen\s3_dns_all.pcapng md`                                                         | none      |
 
 ### M4a — loopback vantage (Finding A closed)
 
-| Command | What it does | Elevation |
-|---|---|---|
-| `npm run m4:loopback` | tap-capture `s2_local_split` / `s13_ws` / `s11_loopback` + verify (app-truth + engine agreement); writes `out\m4\loopback\*_tap.pcapng` | none |
-| `npm run m4:loopback -- --tshark` | also run the full M3 tshark gate on the synthesized tap traces | none |
+| Command                           | What it does                                                                                                                            | Elevation |
+| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| `npm run m4:loopback`             | tap-capture `s2_local_split` / `s13_ws` / `s11_loopback` + verify (app-truth + engine agreement); writes `out\m4\loopback\*_tap.pcapng` | none      |
+| `npm run m4:loopback -- --tshark` | also run the full M3 tshark gate on the synthesized tap traces                                                                          | none      |
 
 ### Artifacts
 
@@ -173,16 +173,16 @@ prompt for the whole run; `none` = fully offline and non-elevated.
 every layer (decoder, parity, flows, ergonomics, tap) has its own gate inside,
 so a regression anywhere surfaces as a named failure.
 
-| # | Gate | What it proves | Verified result |
-|---|---|---|---|
-| 1 | typecheck | `tsc --noEmit` clean over `src/**` + `test/**` | clean |
-| 2 | unit-tests | unit + integration tests on synthetic byte fixtures | 36/36 (16 decoder + 17 flows + 3 tap) |
-| 3 | m1-verify | `out\m1.pcapng` frame-by-frame vs tshark | 96 frames, 0 mismatches |
-| 4 | parity-regression | M2 21-column parity metric on every captured trace | 14 traces at thresholds (13×100% + s10 by design*) |
-| 5 | m3-matrix | conv/DNS/HTTP/retransmission checks per trace vs tshark | 14/14 traces fully pass |
-| 6 | m4-dashboard | dashboard regenerated over the whole corpus | index.html (43 KB) + 67 per-trace reports |
-| 7 | m4-export-formats | json/csv/md exports produced | produced + content-sized |
-| 8 | m4a-loopback | userspace-tap scenarios incl. the tshark gate | 3 scenarios pass (22 in-tap checks) |
+| #   | Gate              | What it proves                                          | Verified result                                    |
+| --- | ----------------- | ------------------------------------------------------- | -------------------------------------------------- |
+| 1   | typecheck         | `tsc --noEmit` clean over `src/**` + `test/**`          | clean                                              |
+| 2   | unit-tests        | unit + integration tests on synthetic byte fixtures     | 36/36 (16 decoder + 17 flows + 3 tap)              |
+| 3   | m1-verify         | `out\m1.pcapng` frame-by-frame vs tshark                | 96 frames, 0 mismatches                            |
+| 4   | parity-regression | M2 21-column parity metric on every captured trace      | 14 traces at thresholds (13×100% + s10 by design*) |
+| 5   | m3-matrix         | conv/DNS/HTTP/retransmission checks per trace vs tshark | 14/14 traces fully pass                            |
+| 6   | m4-dashboard      | dashboard regenerated over the whole corpus             | index.html (43 KB) + 67 per-trace reports          |
+| 7   | m4-export-formats | json/csv/md exports produced                            | produced + content-sized                           |
+| 8   | m4a-loopback      | userspace-tap scenarios incl. the tshark gate           | 3 scenarios pass (22 in-tap checks)                |
 
 \* s10_arpdhcp captured ARP with no DHCP DORA on this NIC (media-disconnected
 `ipconfig /renew`); its non-IP packets decode as "unsupported" by design, so
@@ -216,12 +216,12 @@ reports live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
 
 ## Documentation
 
-| Document | Contents |
-|---|---|
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | source layout, layering rules, data flow, key design decisions, old→new path map |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md) | environment setup, the run-`test:all`-after-any-change rule, code conventions, how to add a scenario / decoder protocol / report field / gate |
-| [`docs/project-status.md`](docs/project-status.md) | living status ledger: milestone evidence, risk register, honest unknowns |
-| [`docs/history/`](docs/history/) | verbatim dated evidence: step-0 environment inventory + milestone 1/2/3 reports |
+| Document                                           | Contents                                                                                                                                      |
+| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)     | source layout, layering rules, data flow, key design decisions, old→new path map                                                              |
+| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)       | environment setup, the run-`test:all`-after-any-change rule, code conventions, how to add a scenario / decoder protocol / report field / gate |
+| [`docs/project-status.md`](docs/project-status.md) | living status ledger: milestone evidence, risk register, honest unknowns                                                                      |
+| [`docs/history/`](docs/history/)                   | verbatim dated evidence: step-0 environment inventory + milestone 1/2/3 reports                                                               |
 
 ## What is honest and what is not yet
 

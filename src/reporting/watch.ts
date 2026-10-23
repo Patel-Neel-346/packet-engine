@@ -97,9 +97,10 @@ export function generateIndexHtml(summaries: TraceSummary[], reportDir: string):
   const totalFlows = summaries.reduce((s, t) => s + t.flows, 0);
   const totalUnique = summaries.reduce((s, t) => s + t.uniquePackets, 0);
 
-  const rows = summaries.map((s, idx) => {
-    const relLink = path.basename(s.reportPath);
-    return `
+  const rows = summaries
+    .map((s, idx) => {
+      const relLink = path.basename(s.reportPath);
+      return `
     <tr>
       <td class="mono">${idx + 1}</td>
       <td><strong><a href="${relLink}">${s.basename}</a></strong></td>
@@ -113,7 +114,8 @@ export function generateIndexHtml(summaries: TraceSummary[], reportDir: string):
       <td class="num mono">${bytesLabel(s.sizeBytes)}</td>
       <td><a class="action-btn" href="${relLink}">View Report &rarr;</a></td>
     </tr>`;
-  }).join("");
+    })
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -199,13 +201,21 @@ footer { text-align: center; padding: 2rem; color: var(--muted); font-size: .75r
 
 /** Print formatted table of summaries to stdout */
 export function printConsoleSummary(summaries: TraceSummary[]): void {
-  console.log("\n==========================================================================================");
-  console.log("                       STROBE PACKET ENGINE — TRACE INVENTORY                             ");
-  console.log("==========================================================================================");
   console.log(
-    " #  Trace Name                   EPBs   Uniq   Flows   TCP  UDP  ICM  Retrans    DNS   Duration"
+    "\n==========================================================================================",
   );
-  console.log("------------------------------------------------------------------------------------------");
+  console.log(
+    "                       STROBE PACKET ENGINE — TRACE INVENTORY                             ",
+  );
+  console.log(
+    "==========================================================================================",
+  );
+  console.log(
+    " #  Trace Name                   EPBs   Uniq   Flows   TCP  UDP  ICM  Retrans    DNS   Duration",
+  );
+  console.log(
+    "------------------------------------------------------------------------------------------",
+  );
   summaries.forEach((s, i) => {
     const num = String(i + 1).padStart(2);
     const name = s.basename.padEnd(25).slice(0, 25);
@@ -218,17 +228,23 @@ export function printConsoleSummary(summaries: TraceSummary[]): void {
     const retrans = String(s.retransSegs).padStart(8);
     const dns = String(s.dnsAttributions).padStart(6);
     const dur = formatDuration(s.durationMs).padStart(10);
-    console.log(`${num}  ${name}  ${epbs} ${uniq} ${flows} ${tcp} ${udp} ${icmp} ${retrans} ${dns} ${dur}`);
+    console.log(
+      `${num}  ${name}  ${epbs} ${uniq} ${flows} ${tcp} ${udp} ${icmp} ${retrans} ${dns} ${dur}`,
+    );
   });
-  console.log("------------------------------------------------------------------------------------------");
+  console.log(
+    "------------------------------------------------------------------------------------------",
+  );
   const totEpbs = summaries.reduce((a, b) => a + b.totalEpbs, 0);
   const totUniq = summaries.reduce((a, b) => a + b.uniquePackets, 0);
   const totFlows = summaries.reduce((a, b) => a + b.flows, 0);
   console.log(
     `    TOTAL (${summaries.length} traces):`.padEnd(29) +
-    `${String(totEpbs).padStart(6)} ${String(totUniq).padStart(6)} ${String(totFlows).padStart(7)}`
+      `${String(totEpbs).padStart(6)} ${String(totUniq).padStart(6)} ${String(totFlows).padStart(7)}`,
   );
-  console.log("==========================================================================================\n");
+  console.log(
+    "==========================================================================================\n",
+  );
 }
 
 /** Scans target directory, processes all .pcapng files, updates index.html */

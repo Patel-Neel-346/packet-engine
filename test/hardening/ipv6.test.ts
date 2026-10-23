@@ -7,8 +7,12 @@ import { ip6, tcp, decode, hasError, type ExtSpec } from "./helpers.ts";
 
 describe("ipv6 catalog (C)", () => {
   it("ipv6 C1: valid header -> addresses, hop limit, next header, traffic class, flow label (RFC 8200 §3)", () => {
-    const b = ip6(tcp({ sport: 9, dport: 90 }), { hopLimit: 255, src: "fe800000000000000000000000000005" });
-    b[1] = 0x30; b.writeUInt16BE(0x04d2, 2); // TC nibble 3, flow label 0x04d2
+    const b = ip6(tcp({ sport: 9, dport: 90 }), {
+      hopLimit: 255,
+      src: "fe800000000000000000000000000005",
+    });
+    b[1] = 0x30;
+    b.writeUInt16BE(0x04d2, 2); // TC nibble 3, flow label 0x04d2
     const r = decode(228, b);
     expect(r.ip?.version).toBe(6);
     expect(r.ip?.src).toBe("fe80::5");
@@ -28,7 +32,13 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C3: payload length 0 with hop-by-hop (jumbogram convention) -> documented v1 limit: L3+L4 decoded, payloadLen stays 0 (RFC 2675 §3)", () => {
-    const r = decode(228, ip6(tcp({ sport: 8, dport: 80 }), { exts: [{ kind: "hbh", units: 1, nhAfter: 6 }], payloadLenOverride: 0 }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 8, dport: 80 }), {
+        exts: [{ kind: "hbh", units: 1, nhAfter: 6 }],
+        payloadLenOverride: 0,
+      }),
+    );
     expect(r.ip?.proto).toBe(6); // chain walked to TCP
     expect(r.ip?.extHeaders?.[0].type).toBe(0);
     expect(r.ip?.payloadLen).toBe(0); // no jumbogram reconstruction (documented limit)
@@ -37,32 +47,49 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C4a: hop-by-hop header alone (0) -> chain walked, TCP found (RFC 8200 §4.3)", () => {
-    const r = decode(228, ip6(tcp({ sport: 12, dport: 120 }), { exts: [{ kind: "hbh", units: 0, nhAfter: 6 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 12, dport: 120 }), { exts: [{ kind: "hbh", units: 0, nhAfter: 6 }] }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([0]);
     expect(r.transport?.sport).toBe(12);
     expect(r.errors).toHaveLength(0);
   });
 
   it("ipv6 C4b: routing header alone (43) -> chain walked, TCP found (RFC 8200 §4.4)", () => {
-    const r = decode(228, ip6(tcp({ sport: 13, dport: 130 }), { exts: [{ kind: "routing", units: 0, nhAfter: 6 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 13, dport: 130 }), { exts: [{ kind: "routing", units: 0, nhAfter: 6 }] }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([43]);
     expect(r.transport?.sport).toBe(13);
   });
 
   it("ipv6 C4c: fragment header alone (44) -> walked, TCP at the right offset (RFC 8200 §4.5)", () => {
-    const r = decode(228, ip6(tcp({ sport: 14, dport: 140 }), { exts: [{ kind: "frag", nhAfter: 6, offUnits: 0, mf: false, id: 42 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 14, dport: 140 }), {
+        exts: [{ kind: "frag", nhAfter: 6, offUnits: 0, mf: false, id: 42 }],
+      }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([44]);
     expect(r.transport?.sport).toBe(14);
   });
 
   it("ipv6 C4d: destination-options alone (60) -> chain walked, TCP found (RFC 8200 §4.6)", () => {
-    const r = decode(228, ip6(tcp({ sport: 15, dport: 150 }), { exts: [{ kind: "dstopt", units: 0, nhAfter: 6 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 15, dport: 150 }), { exts: [{ kind: "dstopt", units: 0, nhAfter: 6 }] }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([60]);
     expect(r.transport?.sport).toBe(15);
   });
 
   it("ipv6 C4e: AH alone (51) -> walked per RFC 4302 (NEXT HEADER IS AH BYTE 0; engine bug fixed here)", () => {
-    const r = decode(228, ip6(tcp({ sport: 16, dport: 160 }), { exts: [{ kind: "ah", pl: 1, nhAfter: 6 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 16, dport: 160 }), { exts: [{ kind: "ah", pl: 1, nhAfter: 6 }] }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([51]);
     expect(r.ip?.extHeaders?.[0].lenBytes).toBe(12); // (1 + 2) * 4 per RFC 4302
     expect(r.ip?.proto).toBe(6); // the NEXT HEADER byte 0 pointed at TCP
@@ -71,13 +98,16 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C5: chain of 3 mixed extension headers -> TCP found at the correct offset (RFC 8200 §4)", () => {
-    const r = decode(228, ip6(tcp({ sport: 17, dport: 170 }), {
-      exts: [
-        { kind: "hbh", units: 0, nhAfter: 43 },
-        { kind: "frag", nhAfter: 60, offUnits: 0, mf: false, id: 7 },
-        { kind: "dstopt", units: 0, nhAfter: 6 },
-      ],
-    }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 17, dport: 170 }), {
+        exts: [
+          { kind: "hbh", units: 0, nhAfter: 43 },
+          { kind: "frag", nhAfter: 60, offUnits: 0, mf: false, id: 7 },
+          { kind: "dstopt", units: 0, nhAfter: 6 },
+        ],
+      }),
+    );
     expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([0, 44, 60]);
     expect(r.ip?.proto).toBe(6);
     expect(r.transport?.sport).toBe(17);
@@ -85,7 +115,9 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C6: extension header length field points past end -> error, no throw (RFC 8200 §4)", () => {
-    const b = ip6(tcp({ sport: 18, dport: 180 }), { exts: [{ kind: "dstopt", units: 4, nhAfter: 6 }] });
+    const b = ip6(tcp({ sport: 18, dport: 180 }), {
+      exts: [{ kind: "dstopt", units: 4, nhAfter: 6 }],
+    });
     const cut = b.subarray(0, 48); // 40 header + only 8 of 40 declared ext bytes
     const r = decode(228, cut);
     expect(r.errors.length).toBeGreaterThan(0);
@@ -114,14 +146,24 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C9a: fragment header -> offset, M flag and identification recorded on ip (RFC 8200 §4.5)", () => {
-    const r = decode(228, ip6(tcp({ sport: 21, dport: 210 }), { exts: [{ kind: "frag", nhAfter: 6, offUnits: 5, mf: true, id: 0xdeadbeef }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 21, dport: 210 }), {
+        exts: [{ kind: "frag", nhAfter: 6, offUnits: 5, mf: true, id: 0xdeadbeef }],
+      }),
+    );
     expect(r.ip?.fragment?.offsetBytes).toBe(40);
     expect(r.ip?.fragment?.moreFragments).toBe(true);
     expect(r.ip?.fragment?.id).toBe(0xdeadbeef);
   });
 
   it("ipv6 C9b: non-first fragment (offset > 0) -> NO L4 decode, metadata only (same rule as IPv4)", () => {
-    const r = decode(228, ip6(Buffer.alloc(24, 0x77), { exts: [{ kind: "frag", nhAfter: 6, offUnits: 9, mf: true, id: 3 }] }));
+    const r = decode(
+      228,
+      ip6(Buffer.alloc(24, 0x77), {
+        exts: [{ kind: "frag", nhAfter: 6, offUnits: 9, mf: true, id: 3 }],
+      }),
+    );
     expect(r.ip?.fragment?.offsetBytes).toBe(72);
     expect(r.ip?.fragment?.moreFragments).toBe(true);
     expect(r.transport?.sport).toBeUndefined();
@@ -129,7 +171,12 @@ describe("ipv6 catalog (C)", () => {
   });
 
   it("ipv6 C10: atomic fragment (offset 0, M=0) -> L4 decoded (RFC 8200 §4.5)", () => {
-    const r = decode(228, ip6(tcp({ sport: 22, dport: 220 }), { exts: [{ kind: "frag", nhAfter: 6, offUnits: 0, mf: false, id: 5 }] }));
+    const r = decode(
+      228,
+      ip6(tcp({ sport: 22, dport: 220 }), {
+        exts: [{ kind: "frag", nhAfter: 6, offUnits: 0, mf: false, id: 5 }],
+      }),
+    );
     expect(r.transport?.sport).toBe(22);
     expect(r.errors).toHaveLength(0);
   });
@@ -163,10 +210,13 @@ describe("ipv6 catalog (C)", () => {
     const parseV6 = (s: string): Buffer => {
       const b = Buffer.alloc(16);
       const hexp = (g: string, off: number) => {
-        g.split(":").filter((x) => x !== "").forEach((grp, i) => {
-          const v = parseInt(grp, 16);
-          b[off + i * 2] = v >> 8; b[off + i * 2 + 1] = v & 0xff;
-        });
+        g.split(":")
+          .filter((x) => x !== "")
+          .forEach((grp, i) => {
+            const v = parseInt(grp, 16);
+            b[off + i * 2] = v >> 8;
+            b[off + i * 2 + 1] = v & 0xff;
+          });
       };
       const hiLo = s.split("::");
       if (hiLo.length === 1) {
@@ -177,21 +227,28 @@ describe("ipv6 catalog (C)", () => {
       if (/^:ffff:/.test(hiLo[1])) {
         // dotted-quad tail (v4-mapped)
         const parts = hiLo[1].slice(":ffff:".length).split(".").map(Number);
-        b[10] = 0xff; b[11] = 0xff;
+        b[10] = 0xff;
+        b[11] = 0xff;
         for (let i = 0; i < 4; i++) b[12 + i] = parts[i];
       } else {
         const comps = hiLo[1].split(":").filter((x) => x !== "");
         for (let i = 0; i < comps.length; i++) {
           const v = parseInt(comps[comps.length - 1 - i], 16);
-          b[15 - i * 2] = v & 0xff; b[14 - i * 2] = (v >> 8) & 0xff;
+          b[15 - i * 2] = v & 0xff;
+          b[14 - i * 2] = (v >> 8) & 0xff;
         }
       }
       return b;
     };
     // seeded PRNG (mulberry32, seed printed here for reproduction)
-    const SEED = 0xC0FFEE;
+    const SEED = 0xc0ffee;
     let a = SEED >>> 0;
-    const rnd = () => { a = (a + 0x6d2b79f5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0); };
+    const rnd = () => {
+      a = (a + 0x6d2b79f5) | 0;
+      let t = Math.imul(a ^ (a >>> 15), 1 | a);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return (t ^ (t >>> 14)) >>> 0;
+    };
     for (let i = 0; i < 20; i++) {
       const bytes = Buffer.from(Array.from({ length: 16 }, () => rnd() & 0xff));
       // format via the ENGINE on a synthetic packet, then parse the text back

@@ -26,8 +26,10 @@ describe("pcapng writer (pcapngwrite.ts)", () => {
     // a 4-byte-unaligned tail (65B) that exercises EPB padding.
     const mkFrame = (len: number, fill: number): Buffer => {
       const b = Buffer.alloc(len, fill);
-      b[0] = 0xff; b[1] = 0x02; // dst mac prefix (realistic-ish)
-      b[12] = 0x08; b[13] = 0x00; // ethertype IPv4
+      b[0] = 0xff;
+      b[1] = 0x02; // dst mac prefix (realistic-ish)
+      b[12] = 0x08;
+      b[13] = 0x00; // ethertype IPv4
       return b;
     };
     const chunks: PcapngChunk[] = [
@@ -144,8 +146,14 @@ describe("LoopbackTap: real in-process loopback echo (Finding A end-to-end)", ()
       s.on("data", (c: Buffer) => {
         buf = Buffer.concat([buf, c]);
       });
-      s.on("close", () => { clearTimeout(bail); resolve(buf.toString("utf8")); });
-      s.on("error", () => { clearTimeout(bail); resolve("error"); });
+      s.on("close", () => {
+        clearTimeout(bail);
+        resolve(buf.toString("utf8"));
+      });
+      s.on("error", () => {
+        clearTimeout(bail);
+        resolve("error");
+      });
     });
 
     // Sanity BEFORE the tap analysis: the app-level echo itself worked.

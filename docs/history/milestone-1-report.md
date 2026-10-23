@@ -6,13 +6,13 @@ verify the trace with an independent tool (tshark 4.6.9). Status: **complete**
 
 ## What ran (exact commands)
 
-| Purpose | Command | Result recorded |
-|---|---|---|
-| Install deps | `npm install --no-fund --no-audit` (in `strobe-packet-tracker/`) | 3 packages |
-| Typecheck | `npm run typecheck` (`tsc --noEmit`) | clean |
-| Capture (needs 1 UAC approval) | `node src/cli.ts m1-capture` | see actual results |
-| Pick best per-component trace | `node src/cli.ts m1-pick` | selected comp 36 |
-| Independent verification | `node src/cli.ts m1-verify` | PASS, 0 mismatches |
+| Purpose                        | Command                                                          | Result recorded    |
+| ------------------------------ | ---------------------------------------------------------------- | ------------------ |
+| Install deps                   | `npm install --no-fund --no-audit` (in `strobe-packet-tracker/`) | 3 packages         |
+| Typecheck                      | `npm run typecheck` (`tsc --noEmit`)                             | clean              |
+| Capture (needs 1 UAC approval) | `node src/cli.ts m1-capture`                                     | see actual results |
+| Pick best per-component trace  | `node src/cli.ts m1-pick`                                        | selected comp 36   |
+| Independent verification       | `node src/cli.ts m1-verify`                                      | PASS, 0 mismatches |
 
 The elevated capture bundle (generated `out/m1.ps1`, one UAC prompt) does, in
 order, with every step and its **real output** recorded to `out/m1.log`:
@@ -26,7 +26,7 @@ order, with every step and its **real output** recorded to `out/m1.log`:
    `SPT_HTTP6_0 -i <v6> -t TCP -p 443`, `SPT_DNS -t UDP -p 53`
 6. `pktmon filter list` (records all four filters active)
 7. `pktmon start --capture --comp 33 36 74 75 --pkt-size 0 --log-mode
-   multi-file --file-name <out>\m1.etl --file-size 64` (component IDs picked by
+multi-file --file-name <out>\m1.etl --file-size 64` (component IDs picked by
    the script from the JSON inventory for the up adapter, Ethernet-medium only,
    npcap.sys excluded)
 8. `pktmon status --buffer-info`
@@ -48,16 +48,17 @@ Run C (final; runs A/B were earlier revisions, their fixes are logged below):
   4 (comp 75) = 144.
 - Per-component decode quality (`m1-pick`, tshark `frame.protocols`):
 
-  | component | packets | full-Ethernet L2 | bare L3 | decoded IP |
-  |---|---|---|---|---|
-  | 33 WFP 802.3 | 0 | 0 | 0 | 0 |
-  | 36 nwifi.sys | **96** | **96** | 0 | 48 |
-  | 74 TCPIP6 | 44 | 44* | (tshark reads as eth) | 44 |
-  | 75 TCPIP | 4 | 4* | | 4 |
+  | component    | packets | full-Ethernet L2 | bare L3               | decoded IP |
+  | ------------ | ------- | ---------------- | --------------------- | ---------- |
+  | 33 WFP 802.3 | 0       | 0                | 0                     | 0          |
+  | 36 nwifi.sys | **96**  | **96**           | 0                     | 48         |
+  | 74 TCPIP6    | 44      | 44*              | (tshark reads as eth) | 44         |
+  | 75 TCPIP     | 4       | 4*               |                       | 4          |
 
   \* 74/75 packets are bare IP payloads (no L2 header) — tshark only
   interprets them because the file claims LINKTYPE_ETHERNET; they decode as
   valid IP anyway.
+
 - Primary trace selected: `out/m1.pcapng` = `m1_comp36.pcapng` (18,568 bytes in
   a first run; 96 frames in this run — see "facts" below).
 - Independent verification (`m1-verify`, on the selected trace):

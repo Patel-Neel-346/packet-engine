@@ -8,9 +8,7 @@
 
 import { describe, it, expect } from "@jest/globals";
 import { decodePacket, flowIdOf } from "../../src/engine/decoder.ts";
-import {
-  eth, ip4, ip6, tcp, decode, hasError,
-} from "./helpers.ts";
+import { eth, ip4, ip6, tcp, decode, hasError } from "./helpers.ts";
 
 describe("framing (catalog A)", () => {
   it("framing A1: plain Ethernet II + IPv4 -> EtherType 0x0800 detected, MACs decoded (RFC 894)", () => {
@@ -42,7 +40,10 @@ describe("framing (catalog A)", () => {
   });
 
   it("framing A4: double tag 802.1ad 0x88A8 + 0x8100 -> both tags recorded (IEEE 802.1ad Q-in-Q)", () => {
-    const frame = eth(ip4(tcp({ sport: 10, dport: 100 })), { vlans: [100, 200], tpids: [0x88a8, 0x8100] });
+    const frame = eth(ip4(tcp({ sport: 10, dport: 100 })), {
+      vlans: [100, 200],
+      tpids: [0x88a8, 0x8100],
+    });
     const r = decode(1, frame);
     expect(r.framing).toBe("vlan");
     expect(r.vlanIds).toEqual([100, 200]);
@@ -69,8 +70,10 @@ describe("framing (catalog A)", () => {
   it("framing A7: ARP request -> kind 'arp', opcode recorded, no flow created (RFC 826)", () => {
     const arpReq = Buffer.concat([
       Buffer.from([0x00, 0x01, 0x08, 0x00, 6, 4, 0x00, 0x01]),
-      Buffer.from("aabbccddeeff", "hex"), Buffer.from([10, 0, 0, 1]),
-      Buffer.alloc(6), Buffer.from([10, 0, 0, 2]),
+      Buffer.from("aabbccddeeff", "hex"),
+      Buffer.from([10, 0, 0, 1]),
+      Buffer.alloc(6),
+      Buffer.from([10, 0, 0, 2]),
     ]);
     const r = decode(1, eth(arpReq, { ethertype: 0x0806 }));
     expect(r.transport?.kind).toBe("arp");
@@ -82,8 +85,10 @@ describe("framing (catalog A)", () => {
   it("framing A7b: ARP reply -> opcode 2 decoded (RFC 826)", () => {
     const arpRep = Buffer.concat([
       Buffer.from([0x00, 0x01, 0x08, 0x00, 6, 4, 0x00, 0x02]),
-      Buffer.from("001122334455", "hex"), Buffer.from([10, 0, 0, 2]),
-      Buffer.from("aabbccddeeff", "hex"), Buffer.from([10, 0, 0, 1]),
+      Buffer.from("001122334455", "hex"),
+      Buffer.from([10, 0, 0, 2]),
+      Buffer.from("aabbccddeeff", "hex"),
+      Buffer.from([10, 0, 0, 1]),
     ]);
     const r = decode(1, eth(arpRep, { ethertype: 0x0806 }));
     expect(r.transport?.kind).toBe("arp");
@@ -107,7 +112,8 @@ describe("framing (catalog A)", () => {
   it("framing A10: raw 802.11 data frame, non-QoS (LLC/SNAP at offset 24) -> IP decoded (IEEE 802.11)", () => {
     // FC byte0 0x08 = v0/type2(data)/subtype0 (non-QoS data)
     const l2 = Buffer.alloc(24);
-    l2[0] = 0x08; l2[1] = 0x01;
+    l2[0] = 0x08;
+    l2[1] = 0x01;
     const llc = Buffer.from("aaaa030000000800", "hex");
     const frame = Buffer.concat([l2, llc, ip4(tcp({ sport: 9, dport: 90 }))]);
     const r = decode(1, frame);
@@ -119,7 +125,8 @@ describe("framing (catalog A)", () => {
   it("framing A10b: raw 802.11 QoS data frame (LLC/SNAP at offset 26) -> IP decoded", () => {
     // FC byte0 0x48 = v0/type2(data)/subtype8 (QoS data)
     const l2 = Buffer.alloc(26);
-    l2[0] = 0x48; l2[1] = 0x01;
+    l2[0] = 0x48;
+    l2[1] = 0x01;
     const llc = Buffer.from("aaaa030000000800", "hex");
     const frame = Buffer.concat([l2, llc, ip4(tcp({ sport: 9, dport: 90 }))]);
     const r = decode(1, frame);

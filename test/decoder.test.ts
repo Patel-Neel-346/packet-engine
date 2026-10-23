@@ -60,12 +60,19 @@ function ip4(
   dst: string,
   proto: number,
   payloadAndOptions: Buffer,
-  opts: { ihl?: number; totalLen?: number; id?: number; flagsFrag?: number; ttl?: number; corruptChecksum?: boolean } = {},
+  opts: {
+    ihl?: number;
+    totalLen?: number;
+    id?: number;
+    flagsFrag?: number;
+    ttl?: number;
+    corruptChecksum?: boolean;
+  } = {},
 ): Buffer {
   const ihl = opts.ihl ?? 20;
   const total = opts.totalLen ?? ihl + payloadAndOptions.length;
   const h = Buffer.alloc(ihl);
-  h[0] = 0x40 | ihl / 4;
+  h[0] = 0x40 | (ihl / 4);
   h.writeUInt16BE(total, 2);
   h.writeUInt16BE(opts.id ?? 0x1234, 4);
   h.writeUInt16BE(opts.flagsFrag ?? 0x4000, 6);
@@ -157,9 +164,7 @@ function dnsMessage(
 
 describe("decodePacket: ethernet framing", () => {
   it("decodes Ethernet→IPv4→TCP fully and normalizes the flow id (direction-independent)", () => {
-    const frame = eth(
-      ip4("10.66.52.167", "104.20.26.136", 6, tcp(65123, 443, 0x02)),
-    );
+    const frame = eth(ip4("10.66.52.167", "104.20.26.136", 6, tcp(65123, 443, 0x02)));
     const r = decodePacket(1, frame, frame.length);
     expect(r.framing).toBe("ethernet");
     expect(r.ethertype).toBe(0x0800);
@@ -177,7 +182,11 @@ describe("decodePacket: ethernet framing", () => {
     // The canonical flow id puts the LOWER ip/port endpoint first…
     expect(flowIdOf(r)).toBe("p6 104.20.26.136:443 <--> 10.66.52.167:65123");
     // …and the reverse direction MUST map to the exact same flow id.
-    const back = decodePacket(1, eth(ip4("104.20.26.136", "10.66.52.167", 6, tcp(443, 65123, 0x10))), 100);
+    const back = decodePacket(
+      1,
+      eth(ip4("104.20.26.136", "10.66.52.167", 6, tcp(443, 65123, 0x10))),
+      100,
+    );
     expect(flowIdOf(back)).toBe(flowIdOf(r));
   });
 
@@ -235,12 +244,26 @@ describe("decodePacket: ethernet framing", () => {
 
 describe("decodePacket: DNS parsing", () => {
   it("extracts questions + A + AAAA + CNAME (via compression pointer) over UDP", () => {
-    const msg = dnsMessage(0x2ccb, false, [{ name: "example.org", type: 255 }], [
-      // CNAME: pointer-free name "www.org"
-      { type: 5, data: Buffer.concat([Buffer.from([3]), Buffer.from("www"), Buffer.from([3]), Buffer.from("org"), Buffer.from([0])]) },
-      { type: 1, data: Buffer.from([93, 184, 215, 14]) },
-      { type: 28, data: hex("2606470090d66c5ea14256e5252b85fe") },
-    ]);
+    const msg = dnsMessage(
+      0x2ccb,
+      false,
+      [{ name: "example.org", type: 255 }],
+      [
+        // CNAME: pointer-free name "www.org"
+        {
+          type: 5,
+          data: Buffer.concat([
+            Buffer.from([3]),
+            Buffer.from("www"),
+            Buffer.from([3]),
+            Buffer.from("org"),
+            Buffer.from([0]),
+          ]),
+        },
+        { type: 1, data: Buffer.from([93, 184, 215, 14]) },
+        { type: 28, data: hex("2606470090d66c5ea14256e5252b85fe") },
+      ],
+    );
     const frame = eth(ip4("10.66.52.167", "10.66.52.203", 17, udp(56850, 53, msg)));
     const r = decodePacket(1, frame, frame.length);
     expect(r.dns?.transactionId).toBe(0x2ccb);
@@ -254,7 +277,9 @@ describe("decodePacket: DNS parsing", () => {
     const msg = dnsMessage(0xbeef, false, [{ name: "example.com", type: 1 }], []);
     const prefix = Buffer.alloc(2);
     prefix.writeUInt16BE(msg.length, 0);
-    const frame = eth(ip4("10.0.0.1", "2.2.2.2", 6, tcp(5000, 53, 0x18, Buffer.concat([prefix, msg]))));
+    const frame = eth(
+      ip4("10.0.0.1", "2.2.2.2", 6, tcp(5000, 53, 0x18, Buffer.concat([prefix, msg]))),
+    );
     const r = decodePacket(1, frame, frame.length);
     expect(r.dns?.transactionId).toBe(0xbeef);
     expect(r.dns?.questions[0].name).toBe("example.com");
@@ -278,11 +303,19 @@ describe("decodePacket: DNS parsing", () => {
 
 describe("decodePacket: IP-layer edge cases", () => {
   it("records IPv4 fragment fields (MF bit + offset) but never fakes reassembly", () => {
-    const f1 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(40), { flagsFrag: 0x2001, id: 7 })), 100);
+    const f1 = decodePacket(
+      1,
+      eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(40), { flagsFrag: 0x2001, id: 7 })),
+      100,
+    );
     expect(f1.ip?.fragment?.moreFragments).toBe(true);
     expect(f1.ip?.fragment?.offsetBytes).toBe(8); // raw frag field 1 → 8 bytes
     expect(f1.ip?.fragment?.id).toBe(7);
-    const f2 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(30), { flagsFrag: 62, id: 7 })), 100);
+    const f2 = decodePacket(
+      1,
+      eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(30), { flagsFrag: 62, id: 7 })),
+      100,
+    );
     expect(f2.ip?.fragment?.moreFragments).toBe(false);
     expect(f2.ip?.fragment?.offsetBytes).toBe(8 * 62);
   });
@@ -383,13 +416,21 @@ describe("decodePacket: TCP payload metadata (no decryption ever)", () => {
     const sniList = Buffer.concat([
       Buffer.alloc(2), // list length, patched below
       Buffer.from([0x00]), // entry type 0 = hostname
-      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(hostBytes.length, 0); return b; })(),
+      (() => {
+        const b = Buffer.alloc(2);
+        b.writeUInt16BE(hostBytes.length, 0);
+        return b;
+      })(),
       hostBytes,
     ]);
     sniList.writeUInt16BE(sniList.length - 2, 0);
     const sniExt = Buffer.concat([
       Buffer.from([0x00, 0x00]), // extension type = server_name
-      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniList.length, 0); return b; })(),
+      (() => {
+        const b = Buffer.alloc(2);
+        b.writeUInt16BE(sniList.length, 0);
+        return b;
+      })(),
       sniList,
     ]);
     const body = Buffer.concat([
@@ -398,7 +439,11 @@ describe("decodePacket: TCP payload metadata (no decryption ever)", () => {
       Buffer.from([0x00]), // empty session id
       Buffer.from([0x00, 0x02, 0x13, 0x01]), // one cipher suite (TLS_AES_128_GCM)
       Buffer.from([0x01, 0x00]), // compression: null
-      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniExt.length, 0); return b; })(),
+      (() => {
+        const b = Buffer.alloc(2);
+        b.writeUInt16BE(sniExt.length, 0);
+        return b;
+      })(),
       sniExt,
     ]);
     const hsLen = Buffer.alloc(4);
@@ -407,13 +452,14 @@ describe("decodePacket: TCP payload metadata (no decryption ever)", () => {
     const hsBody = Buffer.concat([hsLen, body]);
     const recHeader = Buffer.alloc(5);
     recHeader[0] = 0x16; // handshake record
-    recHeader[1] = 0x03; recHeader[2] = 0x01; // TLS 1.0 record layer
+    recHeader[1] = 0x03;
+    recHeader[2] = 0x01; // TLS 1.0 record layer
     recHeader.writeUInt16BE(hsBody.length, 3);
     const tls = Buffer.concat([recHeader, hsBody]);
     const frame = eth(ip4("10.0.0.10", "1.2.3.4", 6, tcp(50000, 443, 0x18, tls)));
 
     const r = decodePacket(1, frame, frame.length);
-    expect((r.transport?.payloadLen ?? 0)).toBeGreaterThan(0);
+    expect(r.transport?.payloadLen ?? 0).toBeGreaterThan(0);
     expect(r.tls?.recordVersion).toBe("0301");
     expect(r.tls?.legacyVersion).toBe("0303");
     expect(r.tls?.sni).toBe("example.org");

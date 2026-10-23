@@ -29,24 +29,10 @@ interface CompStats {
   ipFrames: number;
 }
 
-async function compStats(file: string): Promise<
-  Omit<CompStats, "file" | "compId">
-> {
+async function compStats(file: string): Promise<Omit<CompStats, "file" | "compId">> {
   const res = await runCommand(
     tsharkExe(),
-    [
-      "-r",
-      file,
-      "-n",
-      "-T",
-      "fields",
-      "-e",
-      "frame.protocols",
-      "-e",
-      "ip.src",
-      "-e",
-      "ipv6.src",
-    ],
+    ["-r", file, "-n", "-T", "fields", "-e", "frame.protocols", "-e", "ip.src", "-e", "ipv6.src"],
     { timeoutMs: 120_000 },
   );
   if (res.code !== 0) {
@@ -72,9 +58,7 @@ async function compStats(file: string): Promise<
 /** Classify the per-component traces (out/m1_comp<id>.pcapng) and copy the
  * best-decoded one to out/m1.pcapng. Returns a process exit code. */
 export async function m1Pick(): Promise<number> {
-  const compFiles = fs
-    .readdirSync(OUT)
-    .filter((f) => /^m1_comp(\d+)\.pcapng$/.test(f));
+  const compFiles = fs.readdirSync(OUT).filter((f) => /^m1_comp(\d+)\.pcapng$/.test(f));
   if (compFiles.length === 0) {
     console.log("No m1_comp*.pcapng artifacts. Run: npm run m1:capture");
     return 3;
@@ -92,13 +76,9 @@ export async function m1Pick(): Promise<number> {
     );
   }
   // Prefer most full-L2 frames; tie-break on total IP-decoded frames.
-  const best = [...rows].sort(
-    (a, b) => b.ethFrames - a.ethFrames || b.ipFrames - a.ipFrames,
-  )[0];
+  const best = [...rows].sort((a, b) => b.ethFrames - a.ethFrames || b.ipFrames - a.ipFrames)[0];
   const target = path.join(OUT, "m1.pcapng");
   fs.copyFileSync(best.file, target);
-  console.log(
-    `Selected component ${best.compId} (${path.basename(best.file)}) -> ${target}`,
-  );
+  console.log(`Selected component ${best.compId} (${path.basename(best.file)}) -> ${target}`);
   return 0;
 }

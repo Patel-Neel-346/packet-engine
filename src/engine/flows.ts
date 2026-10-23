@@ -456,8 +456,10 @@ function parseHttpStream(data: Buffer, isRequest: boolean): HttpStory | null {
 
     for (let j = pos + 3; j < maxScan; j++) {
       if (
-        data[j - 3] === 0x0d && data[j - 2] === 0x0a &&
-        data[j - 1] === 0x0d && data[j] === 0x0a
+        data[j - 3] === 0x0d &&
+        data[j - 2] === 0x0a &&
+        data[j - 1] === 0x0d &&
+        data[j] === 0x0a
       ) {
         headEnd = j;
         break;
@@ -477,9 +479,7 @@ function parseHttpStream(data: Buffer, isRequest: boolean): HttpStory | null {
       if (idx > 0) {
         const name = line.slice(0, idx).trim().toLowerCase();
         const value = line.slice(idx + 1).trim();
-        m.headers[name] = m.headers[name] === undefined
-          ? value
-          : `${m.headers[name]}, ${value}`;
+        m.headers[name] = m.headers[name] === undefined ? value : `${m.headers[name]}, ${value}`;
       }
     }
 
@@ -684,8 +684,9 @@ function buildTcpStory(events: UniqueEvent[]): TcpStory | null {
   }
 
   story.handshakeComplete = Boolean(
-    story.syn && story.synAck &&
-    (story.ackAfterHandshake || (segs.a2b.length > 0 || segs.b2a.length > 0)),
+    story.syn &&
+    story.synAck &&
+    (story.ackAfterHandshake || segs.a2b.length > 0 || segs.b2a.length > 0),
   );
 
   // Reassemble payload streams using signed 32-bit modular sequence math
@@ -734,9 +735,10 @@ function ensureFlow(map: Map<string, Flow>, k: KeyedFlow, ts: number): Flow {
       uniqueDataPackets: 0,
       uniqueRetransSegs: 0,
       events: [],
-      tcp: k.kind === "tcp"
-        ? { handshakeComplete: false, flagsSeen: [], dataSegs: 0, a2b: null, b2a: null }
-        : null,
+      tcp:
+        k.kind === "tcp"
+          ? { handshakeComplete: false, flagsSeen: [], dataSegs: 0, a2b: null, b2a: null }
+          : null,
       http: null,
     };
     map.set(k.key, f);

@@ -4,24 +4,24 @@ All results below were **actually run on this machine** on 2026-10-21.
 
 ## Machine
 
-| Item | Value |
-|---|---|
-| OS | Microsoft Windows 11 Home Single Language, **build 10.0.26200** (`Get-ComputerInfo`) |
-| CPU | 11th Gen Intel(R) Core(TM) i5-11400H @ 2.70GHz |
-| Admin status | **Not elevated** — `whoami` = `msi\neelp` |
+| Item           | Value                                                                                                                  |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| OS             | Microsoft Windows 11 Home Single Language, **build 10.0.26200** (`Get-ComputerInfo`)                                   |
+| CPU            | 11th Gen Intel(R) Core(TM) i5-11400H @ 2.70GHz                                                                         |
+| Admin status   | **Not elevated** — `whoami` = `msi\neelp`                                                                              |
 | Active adapter | **Wi-Fi** — Intel(R) Wi-Fi 6 AX201 160MHz, ifIndex 8 (Up); Ethernet (ifIndex 6) and Bluetooth (ifIndex 4) disconnected |
-| WinHTTP proxy | "Direct access (no proxy server)" (`netsh winhttp show proxy`); no HTTP(S)_PROXY env vars |
+| WinHTTP proxy  | "Direct access (no proxy server)" (`netsh winhttp show proxy`); no HTTP(S)_PROXY env vars                              |
 
 ## Toolchain
 
-| Tool | Version (verified by running) |
-|---|---|
-| Node.js | **v24.12.0**, npm 11.6.2 |
-| Go | **1.26.5 windows/amd64** |
-| tshark | **TShark (Wireshark) 4.6.9** at `C:\Program Files\Wireshark\tshark.exe` |
-| dumpcap / capinfos | present in the same Wireshark install |
-| curl | in-box `C:\Windows\System32\curl.exe` |
-| pktmon | in-box `C:\Windows\System32\pktmon.exe` |
+| Tool               | Version (verified by running)                                           |
+| ------------------ | ----------------------------------------------------------------------- |
+| Node.js            | **v24.12.0**, npm 11.6.2                                                |
+| Go                 | **1.26.5 windows/amd64**                                                |
+| tshark             | **TShark (Wireshark) 4.6.9** at `C:\Program Files\Wireshark\tshark.exe` |
+| dumpcap / capinfos | present in the same Wireshark install                                   |
+| curl               | in-box `C:\Windows\System32\curl.exe`                                   |
+| pktmon             | in-box `C:\Windows\System32\pktmon.exe`                                 |
 
 ## pktmon surface (as printed by `pktmon help`, plus sub-command help)
 
@@ -51,13 +51,13 @@ Notes verified on this machine:
 Wi-Fi AX201 group (Miniport Id 13, **NdisMedium=Wi-Fi**) contains Ethernet-medium
 components we can capture from instead of the raw NIC:
 
-| Component | Id | Medium / role |
-|---|---|---|
-| WFP 802.3 Filter (wfplwfs.sys) | 33 | filter — Ethernet |
-| Native WiFi Filter Driver (nwifi.sys) | 36 | filter — Ethernet |
-| Npcap Packet Driver (npcap.sys) | 35 | filter — NOT used (ground rule) |
-| TCPIP6 protocol (tcpip.sys) | 74 | protocol — IPv6 |
-| TCPIP protocol (tcpip.sys) | 75 | protocol — IPv4 |
+| Component                             | Id  | Medium / role                   |
+| ------------------------------------- | --- | ------------------------------- |
+| WFP 802.3 Filter (wfplwfs.sys)        | 33  | filter — Ethernet               |
+| Native WiFi Filter Driver (nwifi.sys) | 36  | filter — Ethernet               |
+| Npcap Packet Driver (npcap.sys)       | 35  | filter — NOT used (ground rule) |
+| TCPIP6 protocol (tcpip.sys)           | 74  | protocol — IPv6                 |
+| TCPIP protocol (tcpip.sys)            | 75  | protocol — IPv4                 |
 
 Empirically in milestone 1: miniport/13 gives raw 802.11 frames; 36 gives a mix
 of full-Ethernet + raw-802.11; 74/75 give bare IP packets without L2 header;

@@ -49,7 +49,11 @@ export async function dnsQueryUdp(
     let timer: ReturnType<typeof setTimeout> | undefined;
     const finish = (rcode: number | null, count: number | null, raw: Buffer | null) => {
       clearTimeout(timer);
-      try { sock.close(); } catch { /* already closed */ }
+      try {
+        sock.close();
+      } catch {
+        /* already closed */
+      }
       resolve({ rcode, answerCount: count, raw });
     };
     timer = setTimeout(() => finish(null, null, null), timeoutMs);

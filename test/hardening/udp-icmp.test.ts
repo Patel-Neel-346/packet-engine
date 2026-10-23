@@ -6,7 +6,13 @@ import { describe, it, expect } from "@jest/globals";
 import { eth, ip4, ip6, udp, decode, hasError } from "./helpers.ts";
 
 /** Recompute a UDP checksum over the v4 or v6 pseudo-header and store it. */
-function setUdpChecksum(seg: Buffer, version: 4 | 6, srcHex: string, dstHex: string, proto: number): void {
+function setUdpChecksum(
+  seg: Buffer,
+  version: 4 | 6,
+  srcHex: string,
+  dstHex: string,
+  proto: number,
+): void {
   let sum = 0;
   const src = Buffer.from(srcHex, "hex");
   const dst = Buffer.from(dstHex, "hex");
@@ -17,7 +23,8 @@ function setUdpChecksum(seg: Buffer, version: 4 | 6, srcHex: string, dstHex: str
     for (let i = 0; i < 16; i += 2) sum += src.readUInt16BE(i) + dst.readUInt16BE(i);
     sum += seg.length + proto; // upper-layer length high word = 0 (≤ 0xffff)
   }
-  for (let i = 0; i < seg.length; i += 2) sum += i + 1 < seg.length ? seg.readUInt16BE(i) : seg[i] << 8;
+  for (let i = 0; i < seg.length; i += 2)
+    sum += i + 1 < seg.length ? seg.readUInt16BE(i) : seg[i] << 8;
   while (sum > 0xffff) sum = (sum & 0xffff) + (sum >>> 16);
   seg.writeUInt16BE((~sum & 0xffff) >>> 0, 6); // UDP checksum field is at +6
 }
@@ -49,10 +56,16 @@ describe("udp catalog (E1, E2)", () => {
   });
 
   it("udp E1d: declared length 0 -> tolerated as the IPv6 jumbogram convention (RFC 2675 §3.1, documented)", () => {
-    const a = decode(228, ip4(udp(Buffer.alloc(4), { lenOverride: 0, sport: 62, dport: 612 }), { proto: 17 }));
+    const a = decode(
+      228,
+      ip4(udp(Buffer.alloc(4), { lenOverride: 0, sport: 62, dport: 612 }), { proto: 17 }),
+    );
     expect(a.transport?.payloadLen).toBe(0);
     expect(a.errors).toHaveLength(0); // documented leniency on IPv4
-    const b = decode(228, ip6(udp(Buffer.alloc(4), { lenOverride: 0, sport: 63, dport: 613 }), { nh: 17 }));
+    const b = decode(
+      228,
+      ip6(udp(Buffer.alloc(4), { lenOverride: 0, sport: 63, dport: 613 }), { nh: 17 }),
+    );
     expect(b.transport?.payloadLen).toBe(0);
     expect(b.errors).toHaveLength(0);
   });
@@ -83,7 +96,13 @@ describe("udp catalog (E1, E2)", () => {
 
   it("udp E2d: corrupted checksum over IPv6 -> checksumValid false, decode continues", () => {
     const u = udp(Buffer.from("abcd", "ascii"), { sport: 10, dport: 100 });
-    setUdpChecksum(u, 6, "20010db8000000000000000000000001", "20010db8000000000000000000000002", 17);
+    setUdpChecksum(
+      u,
+      6,
+      "20010db8000000000000000000000001",
+      "20010db8000000000000000000000002",
+      17,
+    );
     u[u.length - 1] ^= 1; // flip a payload bit
     const r = decode(228, ip6(u, { nh: 17 }));
     expect(r.transport?.checksumValid).toBe(false);
@@ -101,7 +120,8 @@ describe("icmp catalog (E3–E6)", () => {
 
   it("icmp E3a: echo request (type 8 code 0) -> type/code/id/seq decoded as metadata (RFC 792)", () => {
     const body = Buffer.alloc(8 + 12);
-    body[0] = 8; body[1] = 0;
+    body[0] = 8;
+    body[1] = 0;
     body.writeUInt16BE(0x9abc, 4); // echo id
     body.writeUInt16BE(0x0100, 6); // seq
     const r = frame4(icmp(body));
@@ -115,7 +135,8 @@ describe("icmp catalog (E3–E6)", () => {
 
   it("icmp E3b: echo reply (type 0) -> id/seq decoded (RFC 792)", () => {
     const body = Buffer.alloc(10);
-    body[0] = 0; body[1] = 0;
+    body[0] = 0;
+    body[1] = 0;
     body.writeUInt16BE(0x55aa, 4);
     body.writeUInt16BE(2, 6);
     const r = frame4(icmp(body));
@@ -126,7 +147,8 @@ describe("icmp catalog (E3–E6)", () => {
 
   it("icmp E3c: destination unreachable (type 3) -> type/code decoded; embedded original header stays UNDECODED (documented v1 limit)", () => {
     const body = Buffer.alloc(4 + 28);
-    body[0] = 3; body[1] = 3; // port unreachable
+    body[0] = 3;
+    body[1] = 3; // port unreachable
     // embedded "original datagram" follows — deliberately not dissected in v1
     body[12] = 0x45; // an embedded IPv4 header pattern
     const r = frame4(icmp(body));
@@ -139,7 +161,8 @@ describe("icmp catalog (E3–E6)", () => {
   it("icmp E4: ICMPv6 echo request/reply (128/129) -> type/code + echo id/seq (RFC 4443 §4.1)", () => {
     for (const ty of [128, 129]) {
       const body = Buffer.alloc(10);
-      body[0] = ty; body[1] = 0;
+      body[0] = ty;
+      body[1] = 0;
       body.writeUInt16BE(0x77, 4);
       body.writeUInt16BE(9, 6);
       const r = frame6(icmp(body));

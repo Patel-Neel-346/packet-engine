@@ -14,14 +14,14 @@ offline, zero UAC prompts.**
 
 ## What was built
 
-| File | Role |
-|---|---|
-| `src/flows.ts` | FlowEngine — EPB view (all copies, direction-counted) + unique view (deduped): per-flow timelines, TCP lifecycle (SYN/SYN-ACK+Δms/FIN/RST), stream reassembly (novel-range insertion: retrans, partial retrans, gaps, truncation, seq wrap, 8 MiB cap), DNS `ip→names` map, SNI, HTTP/1.x stories |
-| `src/dedupe.ts` | the M2 copy-collapse rule extracted into a shared module — parity and flow engines can never drift apart (verified: parity re-run identical on all 14 traces) |
-| `src/m3Verify.ts` | M3.3 verification harness — tshark conversation/frames/bytes, DNS records, HTTP stories, per-flow retransmission counts |
-| `src/pcapwrite.ts` | classic-pcap writer → exports the **deduped** packet view so tshark can analyze exactly the packet population the engine analyzed |
-| `src/cli.ts` (`m3-flows`, `m3-verify`) | wired commands; npm scripts `m3:flows`, `m3:verify` |
-| `test/flows.test.ts` | flow-engine tests on real traces (regression-anchored) |
+| File                                   | Role                                                                                                                                                                                                                                                                                              |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/flows.ts`                         | FlowEngine — EPB view (all copies, direction-counted) + unique view (deduped): per-flow timelines, TCP lifecycle (SYN/SYN-ACK+Δms/FIN/RST), stream reassembly (novel-range insertion: retrans, partial retrans, gaps, truncation, seq wrap, 8 MiB cap), DNS `ip→names` map, SNI, HTTP/1.x stories |
+| `src/dedupe.ts`                        | the M2 copy-collapse rule extracted into a shared module — parity and flow engines can never drift apart (verified: parity re-run identical on all 14 traces)                                                                                                                                     |
+| `src/m3Verify.ts`                      | M3.3 verification harness — tshark conversation/frames/bytes, DNS records, HTTP stories, per-flow retransmission counts                                                                                                                                                                           |
+| `src/pcapwrite.ts`                     | classic-pcap writer → exports the **deduped** packet view so tshark can analyze exactly the packet population the engine analyzed                                                                                                                                                                 |
+| `src/cli.ts` (`m3-flows`, `m3-verify`) | wired commands; npm scripts `m3:flows`, `m3:verify`                                                                                                                                                                                                                                               |
+| `test/flows.test.ts`                   | flow-engine tests on real traces (regression-anchored)                                                                                                                                                                                                                                            |
 
 ## Step-by-step (each verified before moving on)
 
@@ -44,14 +44,14 @@ offline, zero UAC prompts.**
 
 Results: `test-results/milestone3-checks.md` (detailed), `out/scen/m3_results.json` (machine-readable). Command: `node src\cli.ts m3-verify`.
 
-| Check | Population compared | Result |
-|---|---|---|
-| conv-tcp / conv-udp (frames per direction) | raw trace: tshark conv rows ↔ our tshark-L4-visible EPB counts (visibility measured via the parity oracle, not assumed) | exact on all 14 traces |
-| byte sums per direction | deduped export (classic pcap, one EPB per physical packet) ↔ our unique-view sums | exact within tshark's SI floor-display (verified display rule: `floor(B/1000)` → "kB") |
-| conv-icmp-pairs | `conv,ip`/`conv,ipv6` rows on protocol-pure pairs (tshark 4.6.9 has no `-z conv,icmp` — verified) | exact (s8 3/3) |
-| dns-attribution | our `ip→names` map vs tshark `dns.qry.name/dns.a/dns.aaaa` response rows | exact (s3 4/4) |
-| http-stories | request method+URI and response status sets vs tshark `http` rows | exact (s2: 3 GET / → 3× 200) |
-| retransmission-stories | per-flow `tcp.analysis.retransmission` on the deduped export ↔ our fully-covered-segment counts | equal per flow and in total (s12: 16 = 16; e.g. flow `:56211` 3 = 3) |
+| Check                                      | Population compared                                                                                                     | Result                                                                                 |
+| ------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| conv-tcp / conv-udp (frames per direction) | raw trace: tshark conv rows ↔ our tshark-L4-visible EPB counts (visibility measured via the parity oracle, not assumed) | exact on all 14 traces                                                                 |
+| byte sums per direction                    | deduped export (classic pcap, one EPB per physical packet) ↔ our unique-view sums                                       | exact within tshark's SI floor-display (verified display rule: `floor(B/1000)` → "kB") |
+| conv-icmp-pairs                            | `conv,ip`/`conv,ipv6` rows on protocol-pure pairs (tshark 4.6.9 has no `-z conv,icmp` — verified)                       | exact (s8 3/3)                                                                         |
+| dns-attribution                            | our `ip→names` map vs tshark `dns.qry.name/dns.a/dns.aaaa` response rows                                                | exact (s3 4/4)                                                                         |
+| http-stories                               | request method+URI and response status sets vs tshark `http` rows                                                       | exact (s2: 3 GET / → 3× 200)                                                           |
+| retransmission-stories                     | per-flow `tcp.analysis.retransmission` on the deduped export ↔ our fully-covered-segment counts                         | equal per flow and in total (s12: 16 = 16; e.g. flow `:56211` 3 = 3)                   |
 
 ## New oracle facts discovered and pinned down in M3.3
 
@@ -97,6 +97,6 @@ node out\scen\reverify_parity.ts                   -> M2 parity regression (offl
 
 Milestone 3 is complete: the flow engine passes 100% of the oracle checks our
 M2 discipline defined, on every captured trace, with the parity layer
-regression-intact throughout. The engine can now *tell the story of a
-conversation* — who talked to whom, learned names, handshakes, stream bytes,
+regression-intact throughout. The engine can now _tell the story of a
+conversation_ — who talked to whom, learned names, handshakes, stream bytes,
 retransmissions, and HTTP exchanges — with every number proven against tshark.

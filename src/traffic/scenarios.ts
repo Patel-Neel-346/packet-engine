@@ -42,11 +42,7 @@ const ALL_CONV_IDS = [13, 33, 36, 74, 75];
  * races the DNS rotation. Extra background traffic on port filters stays
  * parity-neutral: every captured packet is parsed by both decoders.
  */
-function portFilter(
-  name: string,
-  transport: "TCP" | "UDP",
-  port: number,
-): CaptureFilterSpec[] {
+function portFilter(name: string, transport: "TCP" | "UDP", port: number): CaptureFilterSpec[] {
   return [{ name, args: ["-t", transport, "-p", String(port)] }];
 }
 
@@ -91,10 +87,7 @@ export function coreScenarios(): ScenarioDef[] {
       core: true,
       comps: DEFAULT_COMPS,
       timeoutSec: 60,
-      filters: (c) => [
-        ...portFilter("http_v4", "TCP", 80),
-        ...portFilter("http_v6", "TCP", 80),
-      ],
+      filters: (c) => [...portFilter("http_v4", "TCP", 80), ...portFilter("http_v6", "TCP", 80)],
       run: (c) => toResult(httpExternalFetch(c, 3)),
     },
     {
@@ -112,10 +105,7 @@ export function coreScenarios(): ScenarioDef[] {
       core: true,
       comps: DEFAULT_COMPS,
       timeoutSec: 90,
-      filters: (c) => [
-        ...portFilter("dl_v4", "TCP", 443),
-        ...portFilter("dl_v6", "TCP", 443),
-      ],
+      filters: (c) => [...portFilter("dl_v4", "TCP", 443), ...portFilter("dl_v6", "TCP", 443)],
       run: (c) => toResult(httpsDownload(c, 8_000_000, "s4")),
     },
     {
@@ -152,10 +142,7 @@ export function coreScenarios(): ScenarioDef[] {
       core: true,
       comps: DEFAULT_COMPS,
       timeoutSec: 80,
-      filters: (c) => [
-        ...portFilter("s7_v4", "TCP", 443),
-        ...portFilter("s7_v6", "TCP", 443),
-      ],
+      filters: (c) => [...portFilter("s7_v4", "TCP", 443), ...portFilter("s7_v6", "TCP", 443)],
       run: (c) => toResult(parallelCurls(c, 8)),
     },
     {
@@ -176,10 +163,7 @@ export function coreScenarios(): ScenarioDef[] {
       core: true,
       comps: DEFAULT_COMPS,
       timeoutSec: 60,
-      filters: (c) => [
-        ...portFilter("s15_v4", "TCP", 443),
-        ...portFilter("s15_v6", "TCP", 443),
-      ],
+      filters: (c) => [...portFilter("s15_v4", "TCP", 443), ...portFilter("s15_v6", "TCP", 443)],
       run: (c) => toResult(tlsHelloScenario(c)),
     },
   ];
@@ -242,10 +226,7 @@ export function extendedScenarios(): ScenarioDef[] {
       core: false,
       comps: DEFAULT_COMPS,
       timeoutSec: 90,
-      filters: (c) => [
-        ...portFilter("s12_v4", "TCP", 443),
-        ...portFilter("s12_v6", "TCP", 443),
-      ],
+      filters: (c) => [...portFilter("s12_v4", "TCP", 443), ...portFilter("s12_v6", "TCP", 443)],
       run: (c) => toResult(retransmissionScenario(c)),
     },
     {
@@ -264,10 +245,7 @@ export function extendedScenarios(): ScenarioDef[] {
       comps: DEFAULT_COMPS,
       maxMB: 256,
       timeoutSec: 150,
-      filters: (c) => [
-        ...portFilter("s14_v4", "TCP", 443),
-        ...portFilter("s14_v6", "TCP", 443),
-      ],
+      filters: (c) => [...portFilter("s14_v4", "TCP", 443), ...portFilter("s14_v6", "TCP", 443)],
       run: (c) => httpsDownload(c, 100_000_000, "s14"),
     },
   ];
@@ -275,10 +253,7 @@ export function extendedScenarios(): ScenarioDef[] {
 
 /** Turn scenario definitions + the resolved traffic context into ordered
  * CapturePlans for the capture backend. */
-export function buildPlans(
-  scenarios: ScenarioDef[],
-  ctx: TrafficContext,
-): CapturePlan[] {
+export function buildPlans(scenarios: ScenarioDef[], ctx: TrafficContext): CapturePlan[] {
   return scenarios.map((s) => ({
     id: s.id,
     comps: s.comps,

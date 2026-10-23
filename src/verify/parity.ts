@@ -46,25 +46,59 @@ export interface TsharkFrame {
  * the oracle view. */
 export async function tsharkReadFrames(file: string): Promise<TsharkFrame[]> {
   const args = [
-    "-r", file, "-n", "-T", "fields",
-    "-e", "frame.number",
-    "-e", "frame.cap_len",
-    "-e", "frame.len",
-    "-e", "frame.time_epoch",
-    "-e", "frame.protocols",
-    "-e", "ip.src", "-e", "ip.dst",
-    "-e", "ipv6.src", "-e", "ipv6.dst",
-    "-e", "ip.proto", "-e", "ipv6.nxt",
-    "-e", "tcp.port", "-e", "udp.port",
-    "-e", "tcp.flags",
-    "-e", "icmp.type", "-e", "icmpv6.type",
-    "-e", "dns.qry.name", "-e", "dns.flags.rcode",
-    "-e", "dns.a", "-e", "dns.aaaa",
-    "-e", "tls.handshake.extensions_server_name",
+    "-r",
+    file,
+    "-n",
+    "-T",
+    "fields",
+    "-e",
+    "frame.number",
+    "-e",
+    "frame.cap_len",
+    "-e",
+    "frame.len",
+    "-e",
+    "frame.time_epoch",
+    "-e",
+    "frame.protocols",
+    "-e",
+    "ip.src",
+    "-e",
+    "ip.dst",
+    "-e",
+    "ipv6.src",
+    "-e",
+    "ipv6.dst",
+    "-e",
+    "ip.proto",
+    "-e",
+    "ipv6.nxt",
+    "-e",
+    "tcp.port",
+    "-e",
+    "udp.port",
+    "-e",
+    "tcp.flags",
+    "-e",
+    "icmp.type",
+    "-e",
+    "icmpv6.type",
+    "-e",
+    "dns.qry.name",
+    "-e",
+    "dns.flags.rcode",
+    "-e",
+    "dns.a",
+    "-e",
+    "dns.aaaa",
+    "-e",
+    "tls.handshake.extensions_server_name",
   ];
   const res = await runCommand(tsharkExe(), args, { timeoutMs: 240_000 });
   if (res.code !== 0) {
-    throw new Error(`tshark failed (exit ${res.code}): ${(res.stderr || res.stdout).slice(0, 400)}`);
+    throw new Error(
+      `tshark failed (exit ${res.code}): ${(res.stderr || res.stdout).slice(0, 400)}`,
+    );
   }
   const frames: TsharkFrame[] = [];
   for (const line of res.stdout.split(/\r?\n/)) {
@@ -154,19 +188,43 @@ export async function computeParity(
     if (!f) return false;
     return (
       (f.ip4src !== null || f.ip6src !== null) &&
-      (f.tcpPorts.length > 0 || f.udpPorts.length > 0 || f.icmpType !== null || f.icmpv6Type !== null || (f.ipProto !== null && (f.ipProto === "1" || f.ipProto === "58")))
+      (f.tcpPorts.length > 0 ||
+        f.udpPorts.length > 0 ||
+        f.icmpType !== null ||
+        f.icmpv6Type !== null ||
+        (f.ipProto !== null && (f.ipProto === "1" || f.ipProto === "58")))
     );
   };
   const framingRank = (framing: string): number =>
-    framing === "ethernet" ? 0 : framing === "vlan" ? 1 : framing === "bareIP" ? 2 : framing === "raw80211" ? 3 : 4;
+    framing === "ethernet"
+      ? 0
+      : framing === "vlan"
+        ? 1
+        : framing === "bareIP"
+          ? 2
+          : framing === "raw80211"
+            ? 3
+            : 4;
   for (const g of groups) {
     let best = g.reprIdx;
-    const keyOf = (m: number): [number, number, number, number] =>
-      [oracleDecodable(m) ? 0 : 1, framingRank(decoded[m].framing), decoded[m].errors.length, m];
+    const keyOf = (m: number): [number, number, number, number] => [
+      oracleDecodable(m) ? 0 : 1,
+      framingRank(decoded[m].framing),
+      decoded[m].errors.length,
+      m,
+    ];
     let bestKey = keyOf(g.reprIdx);
     for (const m of g.members) {
       const k = keyOf(m);
-      if (k[0] !== bestKey[0] ? k[0] < bestKey[0] : k[1] !== bestKey[1] ? k[1] < bestKey[1] : k[2] !== bestKey[2] ? k[2] < bestKey[2] : k[3] < bestKey[3]) {
+      if (
+        k[0] !== bestKey[0]
+          ? k[0] < bestKey[0]
+          : k[1] !== bestKey[1]
+            ? k[1] < bestKey[1]
+            : k[2] !== bestKey[2]
+              ? k[2] < bestKey[2]
+              : k[3] < bestKey[3]
+      ) {
         best = m;
         bestKey = k;
       }
@@ -191,14 +249,16 @@ export async function computeParity(
     if (!src || !dst) continue;
     const ports = f.tcpPorts.length > 0 ? f.tcpPorts : f.udpPorts;
     const fl = canonicalFlow(proto, src, Number(ports[0]), dst, Number(ports[ports.length - 1]));
-    tsharkFlowSet.add(
-      `p${fl.proto} ${fl.aip}:${fl.aport} <--> ${fl.bip}:${fl.bport}`,
-    );
+    tsharkFlowSet.add(`p${fl.proto} ${fl.aip}:${fl.aport} <--> ${fl.bip}:${fl.bport}`);
   }
   const flowsMatch = (() => {
     const ours = new Set([...flowSet]);
     const theirs = new Set([...tsharkFlowSet]);
-    for (const f of [...ours]) if (theirs.has(f)) { ours.delete(f); theirs.delete(f); }
+    for (const f of [...ours])
+      if (theirs.has(f)) {
+        ours.delete(f);
+        theirs.delete(f);
+      }
     return ours.size === 0 && theirs.size === 0;
   })();
 
@@ -216,13 +276,19 @@ export async function computeParity(
     const p = g.packet;
     if (p.ipOffset < 0 || p.errors.length > 0) {
       const pclass =
-        p.transport?.kind === "arp" ? "arp" :
-        p.framing === "unknown" ? "unknown-framing" :
-        p.transport ? `proto-${p.transport.proto}` : "no-ip";
+        p.transport?.kind === "arp"
+          ? "arp"
+          : p.framing === "unknown"
+            ? "unknown-framing"
+            : p.transport
+              ? `proto-${p.transport.proto}`
+              : "no-ip";
       bump(pclass, "unsupported");
       unsupported++;
       if (mismatchSamples.length < 6) {
-        mismatchSamples.push(`#${g.reprIdx} (${p.framing}) unsupported: ${p.errors.join("; ").slice(0, 120)}`);
+        mismatchSamples.push(
+          `#${g.reprIdx} (${p.framing}) unsupported: ${p.errors.join("; ").slice(0, 120)}`,
+        );
       }
       continue;
     }
@@ -236,12 +302,18 @@ export async function computeParity(
     const problems: string[] = [];
     // timestamp (2 ms tolerance)
     const ourTs = g.ts;
-    if (!Number.isFinite(ourTs) || !Number.isFinite(f.timeEpoch) || Math.abs(ourTs - f.timeEpoch) * 1e6 > 2000) {
+    if (
+      !Number.isFinite(ourTs) ||
+      !Number.isFinite(f.timeEpoch) ||
+      Math.abs(ourTs - f.timeEpoch) * 1e6 > 2000
+    ) {
       problems.push(`ts ${ourTs.toFixed(6)} vs ${f.timeEpoch}`);
     }
     // capture + frame lengths
-    if (f.capLen !== parsed.packets[idx].capLen) problems.push(`capLen ${parsed.packets[idx].capLen} vs ${f.capLen}`);
-    if (f.frameLen !== parsed.packets[idx].origLen) problems.push(`frameLen ${parsed.packets[idx].origLen} vs ${f.frameLen}`);
+    if (f.capLen !== parsed.packets[idx].capLen)
+      problems.push(`capLen ${parsed.packets[idx].capLen} vs ${f.capLen}`);
+    if (f.frameLen !== parsed.packets[idx].origLen)
+      problems.push(`frameLen ${parsed.packets[idx].origLen} vs ${f.frameLen}`);
     // src/dst IP
     const ourSrc = p.ip?.src ?? null;
     const ourDst = p.ip?.dst ?? null;
@@ -252,16 +324,32 @@ export async function computeParity(
     }
     // protocol
     const tsharkKind =
-      f.tcpPorts.length > 0 ? "tcp" : f.udpPorts.length > 0 ? "udp" :
-      (f.icmpType !== null ? "icmp" : f.icmpv6Type !== null ? "icmpv6" : null);
-    if (p.transport?.kind !== tsharkKind && !(tsharkKind === null && p.transport?.kind === "other")) {
+      f.tcpPorts.length > 0
+        ? "tcp"
+        : f.udpPorts.length > 0
+          ? "udp"
+          : f.icmpType !== null
+            ? "icmp"
+            : f.icmpv6Type !== null
+              ? "icmpv6"
+              : null;
+    if (
+      p.transport?.kind !== tsharkKind &&
+      !(tsharkKind === null && p.transport?.kind === "other")
+    ) {
       let fragmentOk = false;
       if (tsharkKind === null && p.ip && p.ip.fragment && p.transport) {
         // Any fragment of a fragmented datagram: tshark defers the L4 decode
         // to the reassembled datagram, so only the transport protocol number
         // is comparable at wire level.
-        const tsNum = f.ipProto !== null ? Number(f.ipProto) : f.ipv6Next !== null ? Number(f.ipv6Next) : null;
-        fragmentOk = tsNum === p.ip.firstProto && (p.transport.kind === "icmp" || p.transport.kind === "icmpv6" || p.transport.kind === "tcp" || p.transport.kind === "udp");
+        const tsNum =
+          f.ipProto !== null ? Number(f.ipProto) : f.ipv6Next !== null ? Number(f.ipv6Next) : null;
+        fragmentOk =
+          tsNum === p.ip.firstProto &&
+          (p.transport.kind === "icmp" ||
+            p.transport.kind === "icmpv6" ||
+            p.transport.kind === "tcp" ||
+            p.transport.kind === "udp");
       }
       if (!fragmentOk) {
         problems.push(`proto ${p.transport?.kind} vs ${tsharkKind}`);
@@ -270,17 +358,28 @@ export async function computeParity(
     // ports + TCP flags
     if (p.transport?.sport !== undefined && tsharkKind !== null) {
       const tports = tsharkKind === "tcp" ? f.tcpPorts : tsharkKind === "udp" ? f.udpPorts : null;
-      if (tports && !(
-        (Number(tports[0]) === p.transport.sport && Number(tports[tports.length - 1]) === p.transport.dport) ||
-        (Number(tports[0]) === p.transport.dport && Number(tports[tports.length - 1]) === p.transport.sport)
-      )) {
+      if (
+        tports &&
+        !(
+          (Number(tports[0]) === p.transport.sport &&
+            Number(tports[tports.length - 1]) === p.transport.dport) ||
+          (Number(tports[0]) === p.transport.dport &&
+            Number(tports[tports.length - 1]) === p.transport.sport)
+        )
+      ) {
         problems.push(`ports ${p.transport.sport}/${p.transport.dport} vs ${tports.join("/")}`);
       }
     }
     if (p.transport?.kind === "tcp") {
       const tflags = f.tcpFlags;
-      if (tflags !== null && p.transport.tcpFlags !== undefined && (tflags & 0xff) !== (p.transport.tcpFlags & 0xff)) {
-        problems.push(`tcpflags 0x${p.transport.tcpFlags.toString(16)} vs 0x${tflags.toString(16)}`);
+      if (
+        tflags !== null &&
+        p.transport.tcpFlags !== undefined &&
+        (tflags & 0xff) !== (p.transport.tcpFlags & 0xff)
+      ) {
+        problems.push(
+          `tcpflags 0x${p.transport.tcpFlags.toString(16)} vs 0x${tflags.toString(16)}`,
+        );
       }
     }
     // DNS content parity (both sides must have decoded a DNS message).
@@ -288,7 +387,8 @@ export async function computeParity(
       const ourQ = stripDnsDot(p.dns.questions[0]?.name ?? "");
       const theirQ = f.dnsQryName.map(stripDnsDot).sort().join(",");
       if (p.dns.questions.length > 0) {
-        if (!f.dnsQryName.some((n) => stripDnsDot(n) === ourQ)) problems.push(`dnsQry ${ourQ} vs ${theirQ}`);
+        if (!f.dnsQryName.some((n) => stripDnsDot(n) === ourQ))
+          problems.push(`dnsQry ${ourQ} vs ${theirQ}`);
       } else if (f.dnsQryName.length > 0) {
         problems.push(`dnsQry <none> vs ${theirQ} (ours parsed none)`);
       }
@@ -297,8 +397,14 @@ export async function computeParity(
       }
       const ourA = [...p.dns.aRecords].sort();
       const ourAaaa = [...p.dns.aaaaRecords].sort();
-      if (ourA.join(",") !== [...f.dnsA].sort().join(",")) problems.push(`dnsA ${ourA.join(",") || "<none>"} vs ${[...f.dnsA].sort().join(",") || "<none>"}`);
-      if (ourAaaa.join(",") !== [...f.dnsAaaa].sort().join(",")) problems.push(`dnsAAAA ${ourAaaa.join(",") || "<none>"} vs ${[...f.dnsAaaa].sort().join(",") || "<none>"}`);
+      if (ourA.join(",") !== [...f.dnsA].sort().join(","))
+        problems.push(
+          `dnsA ${ourA.join(",") || "<none>"} vs ${[...f.dnsA].sort().join(",") || "<none>"}`,
+        );
+      if (ourAaaa.join(",") !== [...f.dnsAaaa].sort().join(","))
+        problems.push(
+          `dnsAAAA ${ourAaaa.join(",") || "<none>"} vs ${[...f.dnsAaaa].sort().join(",") || "<none>"}`,
+        );
     } else if (!p.dns && f.dnsQryName.length > 0) {
       problems.push(`dns: tshark parsed, we did not (${p.errors.join(";").slice(0, 80)})`);
     }
@@ -307,7 +413,7 @@ export async function computeParity(
       problems.push(`sni ${p.tls.sni} vs ${f.tlsSni}`);
     }
     // DNS content parity when both sides parsed it
-    if (p.dns && tsharkKind === "udp" || p.dns && tsharkKind === "tcp") {
+    if ((p.dns && tsharkKind === "udp") || (p.dns && tsharkKind === "tcp")) {
       // lightweight: compare question name only (detailed DNS parity is
       // handled by the dedicated DNS scenario report)
     }

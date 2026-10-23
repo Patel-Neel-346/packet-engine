@@ -4,12 +4,12 @@ Everything a new developer needs to pick this project up and change it safely.
 
 ## 1. Environment setup
 
-| Requirement | Verified on | Why |
-|---|---|---|
-| Windows 10.0.19041+ | 10.0.26200 (Windows 11) | in-box `pktmon` + `etl2pcap` |
-| Node.js ≥ 24 | v24.12.0 | runs `.ts` directly (type stripping) — no build step, ever |
-| Wireshark/tshark | 4.6.9 at `C:\Program Files\Wireshark\` | the independent verification oracle |
-| Administrator approval | one UAC prompt per capture run | pktmon driver access (non-admin `pktmon start` fails with exit 5) |
+| Requirement            | Verified on                            | Why                                                               |
+| ---------------------- | -------------------------------------- | ----------------------------------------------------------------- |
+| Windows 10.0.19041+    | 10.0.26200 (Windows 11)                | in-box `pktmon` + `etl2pcap`                                      |
+| Node.js ≥ 24           | v24.12.0                               | runs `.ts` directly (type stripping) — no build step, ever        |
+| Wireshark/tshark       | 4.6.9 at `C:\Program Files\Wireshark\` | the independent verification oracle                               |
+| Administrator approval | one UAC prompt per capture run         | pktmon driver access (non-admin `pktmon start` fails with exit 5) |
 
 ```powershell
 npm install        # dev deps only: typescript + @types/node (zero runtime deps)
@@ -25,16 +25,16 @@ elevation, and without network access.
 `npm run test:all` (→ `src/testAll.ts`) re-runs every verification gate in
 sequence and writes `test-results/test-all.md`. Exit 0 only when all 8 pass:
 
-| # | Gate | What it proves |
-|---|---|---|
-| 1 | typecheck | `tsc --noEmit` clean over `src/**` **and** `test/**` |
-| 2 | unit-tests | 36/36 (16 decoder + 17 flows + 3 tap) |
-| 3 | m1-verify | out/m1.pcapng frame-by-frame vs tshark (96 frames, 0 mismatches) |
-| 4 | parity-regression | 14 traces at thresholds (13×100% + s10 by design) |
-| 5 | m3-matrix | 14/14 traces fully pass conv/DNS/HTTP/retrans checks |
-| 6 | m4-dashboard | index.html regenerated over the corpus |
-| 7 | m4-export-formats | json/csv/md exports produced + content-sized |
-| 8 | m4a-loopback | 3 tap scenarios incl. the tshark gate on synthesized traces |
+| #   | Gate              | What it proves                                                   |
+| --- | ----------------- | ---------------------------------------------------------------- |
+| 1   | typecheck         | `tsc --noEmit` clean over `src/**` **and** `test/**`             |
+| 2   | unit-tests        | 36/36 (16 decoder + 17 flows + 3 tap)                            |
+| 3   | m1-verify         | out/m1.pcapng frame-by-frame vs tshark (96 frames, 0 mismatches) |
+| 4   | parity-regression | 14 traces at thresholds (13×100% + s10 by design)                |
+| 5   | m3-matrix         | 14/14 traces fully pass conv/DNS/HTTP/retrans checks             |
+| 6   | m4-dashboard      | index.html regenerated over the corpus                           |
+| 7   | m4-export-formats | json/csv/md exports produced + content-sized                     |
+| 8   | m4a-loopback      | 3 tap scenarios incl. the tshark gate on synthesized traces      |
 
 Every layer (decoder, parity, flows, ergonomics, tap) has its own gate inside,
 so a regression anywhere surfaces as a named failure. Offline, no UAC,
@@ -63,7 +63,7 @@ strings (see §4).
   regenerate them.
 
 > **Warning:** the `out/scen/*.ts` scripts (e.g. `reverify_parity.ts`,
-> `m3_smoke.ts`, `m3_verify_one.ts`) are *load-bearing gitignored artifacts* —
+> `m3_smoke.ts`, `m3_verify_one.ts`) are _load-bearing gitignored artifacts_ —
 > `testAll.ts` gate 4 spawns `out/scen/reverify_parity.ts`, and they import
 > from `src/` by relative path. They were re-pointed during the layered
 > restructure; if you move `src/` files again, patch them too or gate 4 breaks.
@@ -95,7 +95,7 @@ strings (see §4).
 7. **Headers + JSDoc.** Every file starts with the standard metadata block
    (`Layer / Milestone / Verified / Exports`) after its purpose prose;
    exported functions carry a short JSDoc line. Keep claims factual — the
-   header states how the code is *currently* verified, not how it will be.
+   header states how the code is _currently_ verified, not how it will be.
 
 ## 5. How to add things
 

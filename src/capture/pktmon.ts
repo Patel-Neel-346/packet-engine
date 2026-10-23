@@ -35,13 +35,7 @@ export function pktmonExe(): string {
 
 /** Absolute path to the in-box Windows PowerShell 5.1 executable. */
 export function powershellExe(): string {
-  return path.join(
-    systemRoot(),
-    "System32",
-    "WindowsPowerShell",
-    "v1.0",
-    "powershell.exe",
-  );
+  return path.join(systemRoot(), "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
 }
 
 /** Absolute path of the tshark install recorded in Step 0 (Wireshark 4.6.9). */
@@ -66,9 +60,7 @@ export async function runCommand(
     const err: Buffer[] = [];
     child.stdout.on("data", (chunk: Buffer) => out.push(chunk));
     child.stderr.on("data", (chunk: Buffer) => err.push(chunk));
-    child.on("error", (e) =>
-      reject(new Error(`failed to spawn ${command}: ${e.message}`)),
-    );
+    child.on("error", (e) => reject(new Error(`failed to spawn ${command}: ${e.message}`)));
     child.on("close", (code, signal) => {
       resolve({
         code: code ?? -1,

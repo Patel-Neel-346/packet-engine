@@ -91,17 +91,16 @@ function countPcapng(file: string): PcapCount {
 }
 
 async function countTsharkFilter(file: string, displayFilter: string): Promise<number> {
-  const res = await runCommand(tsharkExe(), [
-    "-r", file, "-n", "-Y", displayFilter, "-T", "fields", "-e", "frame.number",
-  ], { timeoutMs: 240_000 });
+  const res = await runCommand(
+    tsharkExe(),
+    ["-r", file, "-n", "-Y", displayFilter, "-T", "fields", "-e", "frame.number"],
+    { timeoutMs: 240_000 },
+  );
   if (res.code !== 0) return -1;
   return res.stdout.split(/\r?\n/).filter((l) => l.trim() !== "").length;
 }
 
-async function scenarioExtras(
-  def: ScenarioDef,
-  scenFile: string,
-): Promise<Record<string, string>> {
+async function scenarioExtras(def: ScenarioDef, scenFile: string): Promise<Record<string, string>> {
   const extra: Record<string, string> = {};
   if (def.id === "s12_retrans") {
     const n = await countTsharkFilter(scenFile, "tcp.analysis.retransmission");
@@ -194,19 +193,27 @@ export async function runMilestoneBatch(batch: "core" | "ext"): Promise<void> {
   const backend = new PktmonBackend(OUT_DIR, SCEN_DIR);
 
   console.log("== traffic context (resolved, non-elevated) ==");
-  console.log(JSON.stringify({
-    exampleV4: ctx.exampleV4, exampleV6: ctx.exampleV6,
-    speedV4: ctx.speedV4, speedV6: ctx.speedV6,
-    quicV4: ctx.quicV4, quicV6: ctx.quicV6,
-    resolver: ctx.resolver, localIp: ctx.localIp,
-  }));
+  console.log(
+    JSON.stringify({
+      exampleV4: ctx.exampleV4,
+      exampleV6: ctx.exampleV6,
+      speedV4: ctx.speedV4,
+      speedV6: ctx.speedV6,
+      quicV4: ctx.quicV4,
+      quicV6: ctx.quicV6,
+      resolver: ctx.resolver,
+      localIp: ctx.localIp,
+    }),
+  );
 
   const backendStatus = await backend.checkAvailableNonElevated();
   console.log(`pktmon non-elevated status: ${JSON.stringify(backendStatus)}`);
 
   const plans = buildPlans(scenarios, ctx);
   const bundleId = `m2_${batch}`;
-  console.log(`launching elevated bundle ${bundleId} with ${plans.length} scenarios (one UAC prompt)...`);
+  console.log(
+    `launching elevated bundle ${bundleId} with ${plans.length} scenarios (one UAC prompt)...`,
+  );
   const launchedAt = Date.now();
 
   // Kick the elevated bundle off; the UAC prompt shows up now. Do NOT await
@@ -224,13 +231,26 @@ export async function runMilestoneBatch(batch: "core" | "ext"): Promise<void> {
     const startedFs = okStart ? fs.statSync(started) : null;
     if (!okStart) {
       console.log(`TIMEOUT waiting for capture start (UAC denied or bundle failed?).`);
-      rows.push({ id: s.id, title: s.title, steps: [], notes: ["capture never started"], parity: null, extra: {}, capture: countPcapng(path.join(SCEN_DIR, `${s.id}_all.pcapng`)), tracePick: "-" });
+      rows.push({
+        id: s.id,
+        title: s.title,
+        steps: [],
+        notes: ["capture never started"],
+        parity: null,
+        extra: {},
+        capture: countPcapng(path.join(SCEN_DIR, `${s.id}_all.pcapng`)),
+        tracePick: "-",
+      });
       break;
     }
     console.log(`started=${startedFs?.mtime.toISOString()}; generating traffic...`);
     const real = await s.run(ctx);
     fs.writeFileSync(trafficDone, "done", "utf8");
-    const okDone = await waitForFresh(done, startedFs?.mtimeMs ?? launchedAt, ((s.timeoutSec ?? 75) + 30) * 1000);
+    const okDone = await waitForFresh(
+      done,
+      startedFs?.mtimeMs ?? launchedAt,
+      ((s.timeoutSec ?? 75) + 30) * 1000,
+    );
     console.log(`  -> capture done=${okDone}, steps=[${real.steps.map((x) => x.step).join(", ")}]`);
     // Prefer the all-components trace (dedupe merges the copies).
     const allFile = path.join(SCEN_DIR, `${s.id}_all.pcapng`);
@@ -251,7 +271,11 @@ export async function runMilestoneBatch(batch: "core" | "ext"): Promise<void> {
   const bundleResult = await bundlePromise;
   console.log(`bundle exit=${bundleResult.exitCode}, log=${bundleResult.logFile}`);
   if (bundleResult.logContent) {
-    fs.writeFileSync(path.join(SCEN_DIR, `${bundleId}.recorded.log`), bundleResult.logContent, "utf8");
+    fs.writeFileSync(
+      path.join(SCEN_DIR, `${bundleId}.recorded.log`),
+      bundleResult.logContent,
+      "utf8",
+    );
   }
 
   // Surface per-scenario filter/fallback results from the recorded bundle log.
@@ -297,20 +321,28 @@ export async function runMilestoneBatch(batch: "core" | "ext"): Promise<void> {
   lines.push(`|---|---|---|---|---|---|---|`);
   for (const row of rows) lines.push(rowLine(row));
   lines.push("");
-  lines.push(`Parity target: >= 90% for core scenarios (M2 addendum). Parity = packets with ALL compared fields (ts, cap/frame len, src/dst IP, ports, protocol, TCP flags, flow membership, DNS/SNI content when parsed) matching tshark 4.6.9, among unique packets after cross-component/raw-802.11 dedupe.`);
+  lines.push(
+    `Parity target: >= 90% for core scenarios (M2 addendum). Parity = packets with ALL compared fields (ts, cap/frame len, src/dst IP, ports, protocol, TCP flags, flow membership, DNS/SNI content when parsed) matching tshark 4.6.9, among unique packets after cross-component/raw-802.11 dedupe.`,
+  );
   lines.push("");
   lines.push(`## Traffic generation details`);
   for (const row of rows) {
     lines.push("");
     lines.push(`### ${row.id} â€” ${row.title}`);
-    lines.push(`- trace: ${path.basename(row.tracePick)} exists=${row.capture.exists} bytes=${row.capture.bytes} epbs=${row.capture.epbs}${row.capture.error ? ` (${row.capture.error})` : ""}`);
+    lines.push(
+      `- trace: ${path.basename(row.tracePick)} exists=${row.capture.exists} bytes=${row.capture.bytes} epbs=${row.capture.epbs}${row.capture.error ? ` (${row.capture.error})` : ""}`,
+    );
     for (const n of row.notes) lines.push(`- note: ${n}`);
     for (const s of row.steps) lines.push(`- step: ${s}`);
     const p = row.parity;
     if (p) {
-      lines.push(`- parity: unique=${p.uniquePackets} matched=${p.matched} parity=${p.parityPct}% unsupported=${p.unsupported} dupsMerged=${p.duplicatesMerged} framing=${JSON.stringify(p.framingCounts)}`);
+      lines.push(
+        `- parity: unique=${p.uniquePackets} matched=${p.matched} parity=${p.parityPct}% unsupported=${p.unsupported} dupsMerged=${p.duplicatesMerged} framing=${JSON.stringify(p.framingCounts)}`,
+      );
       lines.push(`- protocolMatrix=${JSON.stringify(p.protocolMatrix)}`);
-      lines.push(`- flows: ours=${p.flowCountOurs} tshark=${p.flowCountTshark} match=${p.flowsMatch}`);
+      lines.push(
+        `- flows: ours=${p.flowCountOurs} tshark=${p.flowCountTshark} match=${p.flowsMatch}`,
+      );
       for (const m of p.mismatchSamples) lines.push(`- sample: ${m}`);
     }
   }

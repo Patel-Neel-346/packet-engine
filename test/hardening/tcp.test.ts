@@ -3,11 +3,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from "@jest/globals";
-import { eth, ip4, ip6, tcp, tcpOptionMss, tcpOptionWs, tcpOptionSackPermitted, tcpOptionTimestamps, decode, hasError } from "./helpers.ts";
+import {
+  eth,
+  ip4,
+  ip6,
+  tcp,
+  tcpOptionMss,
+  tcpOptionWs,
+  tcpOptionSackPermitted,
+  tcpOptionTimestamps,
+  decode,
+  hasError,
+} from "./helpers.ts";
 
 describe("tcp catalog (D)", () => {
   it("tcp D1: ports, seq, ack, window, urgent pointer decode (RFC 9293 §3.3.1)", () => {
-    const t = tcp({ sport: 51000, dport: 443, seq: 0xdeadbeef, ack: 0xcafebabe, window: 64240, urgent: 7777, flags: 0x18 });
+    const t = tcp({
+      sport: 51000,
+      dport: 443,
+      seq: 0xdeadbeef,
+      ack: 0xcafebabe,
+      window: 64240,
+      urgent: 7777,
+      flags: 0x18,
+    });
     const r = decode(228, ip4(t));
     expect(r.transport?.sport).toBe(51000);
     expect(r.transport?.dport).toBe(443);
@@ -20,8 +39,14 @@ describe("tcp catalog (D)", () => {
 
   it("tcp D2: each flag alone -> exactly that flag bitmask; all 8 together -> full byte (RFC 9293 §3.3.1.1)", () => {
     const kinds: Array<[string, number]> = [
-      ["CWR", 0x80], ["ECE", 0x40], ["URG", 0x20], ["ACK", 0x10],
-      ["PSH", 0x08], ["RST", 0x04], ["SYN", 0x02], ["FIN", 0x01],
+      ["CWR", 0x80],
+      ["ECE", 0x40],
+      ["URG", 0x20],
+      ["ACK", 0x10],
+      ["PSH", 0x08],
+      ["RST", 0x04],
+      ["SYN", 0x02],
+      ["FIN", 0x01],
     ];
     for (const [name, bit] of kinds) {
       const r = decode(228, ip4(tcp({ flags: bit, sport: 9, dport: 90 })));
@@ -35,7 +60,12 @@ describe("tcp catalog (D)", () => {
   it("tcp D3: data offset 5 and 15 -> payload offset correct (RFC 9293 §3.3.1)", () => {
     const a = decode(228, ip4(tcp({ dataOffsetUnits: 5 }, Buffer.alloc(6, 1))));
     expect(a.transport?.payloadLen).toBe(6);
-    const opts = Buffer.concat([tcpOptionMss(1460), tcpOptionWs(7), tcpOptionSackPermitted(), tcpOptionTimestamps(5, 0)]);
+    const opts = Buffer.concat([
+      tcpOptionMss(1460),
+      tcpOptionWs(7),
+      tcpOptionSackPermitted(),
+      tcpOptionTimestamps(5, 0),
+    ]);
     const b = decode(228, ip4(tcp({ dataOffsetUnits: 15, rawOptions: opts }, Buffer.alloc(8, 2))));
     expect(b.transport?.payloadLen).toBe(8);
     expect(b.transport?.headerLen).toBe(60);
@@ -64,7 +94,13 @@ describe("tcp catalog (D)", () => {
 
   it("tcp D5a: SAS/timestamp options parsed to metadata; unknown option kind skipped by its length (RFC 9293 §3.3.1)", () => {
     const unknown = Buffer.from([0xff, 0x04, 0x00, 0x00]); // unknown kind, len 4 → skipped
-    const opts = Buffer.concat([tcpOptionMss(1400), tcpOptionWs(9), tcpOptionSackPermitted(), unknown, tcpOptionTimestamps(0x1234, 0x5678)]);
+    const opts = Buffer.concat([
+      tcpOptionMss(1400),
+      tcpOptionWs(9),
+      tcpOptionSackPermitted(),
+      unknown,
+      tcpOptionTimestamps(0x1234, 0x5678),
+    ]);
     const r = decode(228, ip4(tcp({ dataOffsetUnits: 15, rawOptions: opts }, Buffer.alloc(4, 9))));
     const o = r.transport?.options;
     expect(o?.mss).toBe(1400);
@@ -109,17 +145,26 @@ describe("tcp catalog (D)", () => {
   });
 
   it("tcp D8: checksum valid -> flag true (IPv4 + IPv6 pseudo-header); corrupted -> false, and decode continues (RFC 9293 §2.2)", () => {
-    const recompute = (seg: Buffer, srcBytes: Buffer, dstBytes: Buffer, proto: number, plen: number): number => {
+    const recompute = (
+      seg: Buffer,
+      srcBytes: Buffer,
+      dstBytes: Buffer,
+      proto: number,
+      plen: number,
+    ): number => {
       let sum = 0;
-      for (let i = 0; i < srcBytes.length; i += 2) sum += srcBytes.readUInt16BE(i) + dstBytes.readUInt16BE(i);
+      for (let i = 0; i < srcBytes.length; i += 2)
+        sum += srcBytes.readUInt16BE(i) + dstBytes.readUInt16BE(i);
       sum += proto + (plen > 0xffff ? 0xffff : plen) + (plen > 0xffff ? 0xffff >>> 16 : 0); // hmm keep simple: plen <= 0xffff here
-      for (let i = 0; i < seg.length; i += 2) sum += i + 1 < seg.length ? seg.readUInt16BE(i) : seg[i] << 8;
+      for (let i = 0; i < seg.length; i += 2)
+        sum += i + 1 < seg.length ? seg.readUInt16BE(i) : seg[i] << 8;
       while (sum > 0xffff) sum = (sum & 0xffff) + (sum >>> 16);
       return (~sum & 0xffff) >>> 0;
     };
     // IPv4 positive case
     const t4 = tcp({ sport: 40, dport: 404 }, Buffer.from("data", "ascii"));
-    const ip4src = Buffer.from("0a000001", "hex"), ip4dst = Buffer.from("0a000002", "hex");
+    const ip4src = Buffer.from("0a000001", "hex"),
+      ip4dst = Buffer.from("0a000002", "hex");
     t4.writeUInt16BE(recompute(t4, ip4src, ip4dst, 6, t4.length), 16); // TCP checksum field is at +16
     const good = decode(228, ip4(t4));
     expect(good.transport?.checksumValid).toBe(true);
@@ -136,7 +181,8 @@ describe("tcp catalog (D)", () => {
     let s6 = 0;
     for (let i = 0; i < 16; i += 2) s6 += src6.readUInt16BE(i) + dst6.readUInt16BE(i);
     s6 += t6.length + 6; // upper-layer length (high word 0) + NH=6
-    for (let i = 0; i < t6.length; i += 2) s6 += i + 1 < t6.length ? t6.readUInt16BE(i) : t6[i] << 8;
+    for (let i = 0; i < t6.length; i += 2)
+      s6 += i + 1 < t6.length ? t6.readUInt16BE(i) : t6[i] << 8;
     while (s6 > 0xffff) s6 = (s6 & 0xffff) + (s6 >>> 16);
     t6.writeUInt16BE((~s6 & 0xffff) >>> 0, 16); // TCP checksum field is at +16
     const good6 = decode(228, ip6(t6, { nh: 6 }));
@@ -179,7 +225,12 @@ describe("tcp catalog (D)", () => {
   });
 
   it("tcp D12: segment inside the FIRST fragment of a fragmented datagram -> decoded AND flagged fragmented (RFC 791 §3.2)", () => {
-    const r = decode(1, eth(ip4(tcp({ sport: 70, dport: 700 }) as Buffer, { id: 55, flags: 1, frag: 0 }), { ethertype: 0x0800 }));
+    const r = decode(
+      1,
+      eth(ip4(tcp({ sport: 70, dport: 700 }) as Buffer, { id: 55, flags: 1, frag: 0 }), {
+        ethertype: 0x0800,
+      }),
+    );
     expect(r.ip?.fragment?.moreFragments).toBe(true);
     expect(r.ip?.fragment?.id).toBe(55);
     expect(r.transport?.sport).toBe(70); // first fragment carries the header

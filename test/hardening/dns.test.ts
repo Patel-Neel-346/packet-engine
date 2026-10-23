@@ -9,8 +9,12 @@ import { eth, ip4, ip6, udp, tcp, decode, hasError, dnsMsg } from "./helpers.ts"
 /** Wrap a complete DNS message in Ethernet+IPv4+UDP dst-53. */
 const dnsFrame = (msg: Buffer, over: "v4" | "v6" = "v4"): Buffer =>
   over === "v4"
-    ? eth(ip4(udp(msg, { sport: 40000, dport: 53, lenOverride: 8 + msg.length }), { proto: 17 }), { ethertype: 0x0800 })
-    : eth(ip6(udp(msg, { sport: 40000, dport: 53, lenOverride: 8 + msg.length }), { nh: 17 }), { ethertype: 0x86dd });
+    ? eth(ip4(udp(msg, { sport: 40000, dport: 53, lenOverride: 8 + msg.length }), { proto: 17 }), {
+        ethertype: 0x0800,
+      })
+    : eth(ip6(udp(msg, { sport: 40000, dport: 53, lenOverride: 8 + msg.length }), { nh: 17 }), {
+        ethertype: 0x86dd,
+      });
 
 /** Encode a DNS name on the wire (uncompressed). */
 const nameWire = (n: string): Buffer => {
@@ -76,9 +80,11 @@ describe("dns catalog (F)", () => {
 
   it("dns F4b: self-referencing pointer (0xc00c at offset 12) -> terminates with a NAMED error, bounded (RFC 1035 §4.1.4)", () => {
     const msg = dnsMsg({ questions: [{ name: "example.org", type: 1 }] });
-    msg[12] = 0xc0; msg[13] = 0x0c; // question name points at itself
+    msg[12] = 0xc0;
+    msg[13] = 0x0c; // question name points at itself
     const dstCopy = Buffer.from(msg);
-    dstCopy[12] = 0xc0; dstCopy[13] = 0x0c;
+    dstCopy[12] = 0xc0;
+    dstCopy[13] = 0x0c;
     const t0 = Date.now();
     const r = decode(1, dnsFrame(dstCopy));
     expect(Date.now() - t0).toBeLessThan(250); // bounded time
@@ -88,8 +94,10 @@ describe("dns catalog (F)", () => {
 
   it("dns F4c: mutual pointer pair (A->B, B->A) -> terminates with error, bounded", () => {
     const msg = dnsMsg({ questions: [{ name: "example.org", type: 1 }] }); // 25 bytes total
-    msg[12] = 0xc0; msg[13] = 0x10; // A(12) -> 16
-    msg[16] = 0xc0; msg[17] = 0x0c; // B(16) -> 12  (both offsets inside the message)
+    msg[12] = 0xc0;
+    msg[13] = 0x10; // A(12) -> 16
+    msg[16] = 0xc0;
+    msg[17] = 0x0c; // B(16) -> 12  (both offsets inside the message)
     const r = decode(1, dnsFrame(msg));
     expect(hasError(r, "dns.pointer-loop")).toBe(true);
     expect(r.errors.some((e) => e.startsWith("dns"))).toBe(true);
@@ -97,7 +105,8 @@ describe("dns catalog (F)", () => {
 
   it("dns F4d: pointer past end of message -> error 'dns.pointer-target', partial fields kept", () => {
     const msg = dnsMsg({ questions: [{ name: "example.org", type: 1 }] });
-    msg[12] = 0xc0; msg[13] = 0xff; // target 255 > message length (25)
+    msg[12] = 0xc0;
+    msg[13] = 0xff; // target 255 > message length (25)
     const r = decode(1, dnsFrame(msg));
     expect(hasError(r, "dns.pointer-target")).toBe(true);
     expect(r.dns?.questions).toHaveLength(0);
@@ -105,14 +114,18 @@ describe("dns catalog (F)", () => {
 
   it("dns F4e: pointer INTO the 12-byte header (target 0) -> error 'dns.pointer-target' (RFC 1035 §4.1.4)", () => {
     const msg = dnsMsg({ questions: [{ name: "example.org", type: 1 }] });
-    msg[12] = 0xc0; msg[13] = 0x00; // target 0 = header
+    msg[12] = 0xc0;
+    msg[13] = 0x00; // target 0 = header
     const r = decode(1, dnsFrame(msg));
     expect(hasError(r, "dns.pointer-target")).toBe(true);
   });
 
   it("dns F5a: label length exactly 63 -> decodes (boundary, RFC 1035 §2.3.4)", () => {
     const long = "a".repeat(63);
-    const r = decode(1, dnsFrame(dnsMsg({ questions: [{ name: `${long}.example.org`, type: 1 }] })));
+    const r = decode(
+      1,
+      dnsFrame(dnsMsg({ questions: [{ name: `${long}.example.org`, type: 1 }] })),
+    );
     expect(r.dns?.questions[0].name).toBe(`${long}.example.org`);
     expect(r.errors).toHaveLength(0);
   });
@@ -160,7 +173,10 @@ describe("dns catalog (F)", () => {
   });
 
   it("dns F10a: SYN or port-53 TCP packet with no payload -> no DNS parse, no phantom error", () => {
-    const r = decode(1, eth(ip4(tcp({ sport: 40000, dport: 53, flags: 0x02 })), { ethertype: 0x0800 }));
+    const r = decode(
+      1,
+      eth(ip4(tcp({ sport: 40000, dport: 53, flags: 0x02 })), { ethertype: 0x0800 }),
+    );
     expect(r.dns).toBeUndefined();
     expect(r.errors).toHaveLength(0);
   });
@@ -192,9 +208,17 @@ describe("dns catalog (F)", () => {
   });
 
   it("dns F15: QDCOUNT 2 -> both questions parsed within the bounded ≤10 question walk (engine rule)", () => {
-    const r = decode(1, dnsFrame(dnsMsg({
-      questions: [{ name: "a.example.org", type: 1 }, { name: "b.example.org", type: 28 }],
-    })));
+    const r = decode(
+      1,
+      dnsFrame(
+        dnsMsg({
+          questions: [
+            { name: "a.example.org", type: 1 },
+            { name: "b.example.org", type: 28 },
+          ],
+        }),
+      ),
+    );
     expect(r.dns?.questions).toHaveLength(2);
     expect(r.dns?.questions[1].type).toBe(28);
     expect(r.errors).toHaveLength(0);
@@ -226,13 +250,26 @@ describe("dns catalog (F)", () => {
   });
 
   it("dns F14: internationalized / punycode names (xn--) -> decoded as-is (RFC 5890 §2.3.2.1)", () => {
-    const r = decode(1, dnsFrame(dnsMsg({ questions: [{ name: "xn--bcher-kva.example", type: 1 }] })));
+    const r = decode(
+      1,
+      dnsFrame(dnsMsg({ questions: [{ name: "xn--bcher-kva.example", type: 1 }] })),
+    );
     expect(r.dns?.questions[0].name).toBe("xn--bcher-kva.example");
     expect(r.errors).toHaveLength(0);
   });
 
   it("dns F16: response whose ID does not match any query -> still decoded without throwing (RFC 1035 §4.1.1)", () => {
-    const r = decode(1, dnsFrame(dnsMsg({ id: 0x9876, isResponse: true, an: 0, questions: [{ name: "example.org", type: 1 }] })));
+    const r = decode(
+      1,
+      dnsFrame(
+        dnsMsg({
+          id: 0x9876,
+          isResponse: true,
+          an: 0,
+          questions: [{ name: "example.org", type: 1 }],
+        }),
+      ),
+    );
     expect(r.dns?.transactionId).toBe(0x9876);
     expect(r.dns?.isResponse).toBe(true);
     expect(r.errors).toHaveLength(0);

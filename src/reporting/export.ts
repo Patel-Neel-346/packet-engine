@@ -73,15 +73,30 @@ function serializeFlow(f: Flow, includeEvents: boolean): Record<string, unknown>
   }
   if (f.http) {
     base.http = {
-      requests: f.http.requests.map((r) => ({ method: r.method, uri: r.uri, version: r.version, contentLength: r.contentLength ?? null, bodyComplete: r.bodyComplete })),
-      responses: f.http.responses.map((r) => ({ status: r.status, contentLength: r.contentLength ?? null, chunked: r.chunked, bodyComplete: r.bodyComplete })),
+      requests: f.http.requests.map((r) => ({
+        method: r.method,
+        uri: r.uri,
+        version: r.version,
+        contentLength: r.contentLength ?? null,
+        bodyComplete: r.bodyComplete,
+      })),
+      responses: f.http.responses.map((r) => ({
+        status: r.status,
+        contentLength: r.contentLength ?? null,
+        chunked: r.chunked,
+        bodyComplete: r.bodyComplete,
+      })),
       parsingStopped: f.http.parsingStopped,
     };
   }
   return base;
 }
 
-function streamSummary(s: Flow["tcp"] extends null ? never : NonNullable<Flow["tcp"]>["a2b"] | NonNullable<Flow["tcp"]>["b2a"]): Record<string, unknown> | null {
+function streamSummary(
+  s: Flow["tcp"] extends null
+    ? never
+    : NonNullable<Flow["tcp"]>["a2b"] | NonNullable<Flow["tcp"]>["b2a"],
+): Record<string, unknown> | null {
   if (!s) return null;
   return {
     segments: s.segments,
@@ -100,14 +115,30 @@ function streamSummary(s: Flow["tcp"] extends null ? never : NonNullable<Flow["t
 // ─── CSV ────────────────────────────────────────────────────────────────────
 
 const CSV_HEADER = [
-  "id", "kind", "proto",
-  "aIp", "aPort", "bIp", "bPort",
-  "hosts", "tlsSni",
-  "firstTs", "lastTs", "durationMs",
-  "pktsA2b", "pktsB2a", "bytesA2b", "bytesB2a",
-  "uniquePkts", "uniqueDataPkts", "uniqueRetransSegs",
-  "tcpHandshake", "tcpSynAckMs", "tcpRst",
-  "httpMethods", "httpStatuses",
+  "id",
+  "kind",
+  "proto",
+  "aIp",
+  "aPort",
+  "bIp",
+  "bPort",
+  "hosts",
+  "tlsSni",
+  "firstTs",
+  "lastTs",
+  "durationMs",
+  "pktsA2b",
+  "pktsB2a",
+  "bytesA2b",
+  "bytesB2a",
+  "uniquePkts",
+  "uniqueDataPkts",
+  "uniqueRetransSegs",
+  "tcpHandshake",
+  "tcpSynAckMs",
+  "tcpRst",
+  "httpMethods",
+  "httpStatuses",
 ].join(",");
 
 function csvField(v: string | number | boolean | null | undefined): string {
@@ -124,32 +155,34 @@ export function toCsv(a: FlowAnalysis): string {
   const rows = [CSV_HEADER];
   for (const f of a.flows) {
     const t = f.tcp;
-    rows.push([
-      csvField(f.id),
-      csvField(f.kind),
-      csvField(f.proto),
-      csvField(f.a.ip),
-      csvField(f.a.port),
-      csvField(f.b.ip),
-      csvField(f.b.port),
-      csvField(f.hosts.join(";")),
-      csvField(f.tlsSni.join(";")),
-      csvField(f.firstTs.toFixed(6)),
-      csvField(f.lastTs.toFixed(6)),
-      csvField(Math.round((f.lastTs - f.firstTs) * 1000)),
-      csvField(f.packets.a2b),
-      csvField(f.packets.b2a),
-      csvField(f.bytes.a2b),
-      csvField(f.bytes.b2a),
-      csvField(f.uniquePackets),
-      csvField(f.uniqueDataPackets),
-      csvField(f.uniqueRetransSegs),
-      csvField(t ? t.handshakeComplete : ""),
-      csvField(t?.synAck?.deltaMs?.toFixed(1) ?? ""),
-      csvField(t ? !!t.rst : ""),
-      csvField(f.http?.requests.map((r) => r.method).join(";") ?? ""),
-      csvField(f.http?.responses.map((r) => r.status).join(";") ?? ""),
-    ].join(","));
+    rows.push(
+      [
+        csvField(f.id),
+        csvField(f.kind),
+        csvField(f.proto),
+        csvField(f.a.ip),
+        csvField(f.a.port),
+        csvField(f.b.ip),
+        csvField(f.b.port),
+        csvField(f.hosts.join(";")),
+        csvField(f.tlsSni.join(";")),
+        csvField(f.firstTs.toFixed(6)),
+        csvField(f.lastTs.toFixed(6)),
+        csvField(Math.round((f.lastTs - f.firstTs) * 1000)),
+        csvField(f.packets.a2b),
+        csvField(f.packets.b2a),
+        csvField(f.bytes.a2b),
+        csvField(f.bytes.b2a),
+        csvField(f.uniquePackets),
+        csvField(f.uniqueDataPackets),
+        csvField(f.uniqueRetransSegs),
+        csvField(t ? t.handshakeComplete : ""),
+        csvField(t?.synAck?.deltaMs?.toFixed(1) ?? ""),
+        csvField(t ? !!t.rst : ""),
+        csvField(f.http?.requests.map((r) => r.method).join(";") ?? ""),
+        csvField(f.http?.responses.map((r) => r.status).join(";") ?? ""),
+      ].join(","),
+    );
   }
   return rows.join("\r\n") + "\r\n";
 }
@@ -194,9 +227,13 @@ export function toMarkdown(a: FlowAnalysis): string {
     const f = a.flows[i]!;
     const label = f.hosts.length
       ? f.hosts.join(",")
-      : (f.tlsSni.length ? `sni:${f.tlsSni.join(",")}` : "—");
+      : f.tlsSni.length
+        ? `sni:${f.tlsSni.join(",")}`
+        : "—";
     const durMs = Math.round((f.lastTs - f.firstTs) * 1000);
-    lines.push(`| ${i + 1} | \`${f.id}\` | ${f.kind} | ${label} | ${f.packets.a2b}/${f.packets.b2a} | ${bytesLabel(f.bytes.a2b)}/${bytesLabel(f.bytes.b2a)} | ${f.uniquePackets} | ${durMs} ms |`);
+    lines.push(
+      `| ${i + 1} | \`${f.id}\` | ${f.kind} | ${label} | ${f.packets.a2b}/${f.packets.b2a} | ${bytesLabel(f.bytes.a2b)}/${bytesLabel(f.bytes.b2a)} | ${f.uniquePackets} | ${durMs} ms |`,
+    );
   }
   lines.push("");
 
@@ -207,18 +244,25 @@ export function toMarkdown(a: FlowAnalysis): string {
     lines.push("");
     if (f.tcp) {
       const t = f.tcp;
-      lines.push(`**TCP lifecycle**: ${t.handshakeComplete ? "handshake complete" : "no full handshake"}`);
-      if (t.syn) lines.push(`- SYN at t=${t.syn.ts.toFixed(3)}s${t.synAck ? `, SYN-ACK Δ=${t.synAck.deltaMs?.toFixed(1)} ms` : ""}`);
+      lines.push(
+        `**TCP lifecycle**: ${t.handshakeComplete ? "handshake complete" : "no full handshake"}`,
+      );
+      if (t.syn)
+        lines.push(
+          `- SYN at t=${t.syn.ts.toFixed(3)}s${t.synAck ? `, SYN-ACK Δ=${t.synAck.deltaMs?.toFixed(1)} ms` : ""}`,
+        );
       if (t.rst) lines.push(`- RST at t=${t.rst.ts.toFixed(3)}s`);
       if (t.finA2b || t.finB2a) lines.push(`- FIN: a→b=${!!t.finA2b}, b→a=${!!t.finB2a}`);
       lines.push(`- Flags seen: ${t.flagsSeen.slice(0, 8).join(" → ")}`);
       for (const dir of ["a2b", "b2a"] as const) {
         const s = t[dir];
         if (!s || s.segments === 0) continue;
-        lines.push(`- **${dir}**: ${s.segments} segs, ${bytesLabel(s.bytes.length)} reassembled` +
-          (s.gapCount ? `, **${s.gapCount} gap(s) ${s.gapBytes}B**` : ", 0 gaps") +
-          (s.retransSegs ? `, ${s.retransSegs} retrans (${bytesLabel(s.retransBytes)})` : "") +
-          (s.baseAssumed ? " *(base assumed)*" : ""));
+        lines.push(
+          `- **${dir}**: ${s.segments} segs, ${bytesLabel(s.bytes.length)} reassembled` +
+            (s.gapCount ? `, **${s.gapCount} gap(s) ${s.gapBytes}B**` : ", 0 gaps") +
+            (s.retransSegs ? `, ${s.retransSegs} retrans (${bytesLabel(s.retransBytes)})` : "") +
+            (s.baseAssumed ? " *(base assumed)*" : ""),
+        );
       }
       lines.push("");
     }
@@ -228,7 +272,9 @@ export function toMarkdown(a: FlowAnalysis): string {
       lines.push(`| Dir | Method | URI | Status | Len | Complete |`);
       lines.push(`|---|---|---|---|---|---|`);
       for (const r of f.http.requests)
-        lines.push(`| → | \`${r.method}\` | \`${r.uri}\` | — | ${r.contentLength ?? "—"} | ${r.bodyComplete} |`);
+        lines.push(
+          `| → | \`${r.method}\` | \`${r.uri}\` | — | ${r.contentLength ?? "—"} | ${r.bodyComplete} |`,
+        );
       for (const r of f.http.responses)
         lines.push(`| ← | — | — | ${r.status} | ${r.contentLength ?? "—"} | ${r.bodyComplete} |`);
       lines.push("");

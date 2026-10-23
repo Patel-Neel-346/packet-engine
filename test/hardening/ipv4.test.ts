@@ -3,9 +3,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect } from "@jest/globals";
-import {
-  eth, ip4, tcp, udp, decode, hasError, hasError as hasCode,
-} from "./helpers.ts";
+import { eth, ip4, tcp, udp, decode, hasError, hasError as hasCode } from "./helpers.ts";
 
 describe("ipv4 catalog (B)", () => {
   it("ipv4 B1: valid header -> addresses, TTL, protocol, total length, identification, checksum flag (RFC 791 §3.1)", () => {
@@ -40,11 +38,17 @@ describe("ipv4 catalog (B)", () => {
     // 24-byte header (IHL 6): 20 base + 4 option bytes (EOL pad)
     const r = decode(228, ip4(Buffer.alloc(20), { ihl: 24 }));
     expect(r.ip?.headerLen).toBe(24);
-    const r2 = decode(228, Buffer.concat([
-      Buffer.from([0x46, 0x00, 0x00, 0x2a, 0, 0, 0x40, 0x00, 64, 6, 0, 0, 10, 0, 0, 1, 10, 0, 0, 2, 9, 0, 0, 0]),
-      tcp({ sport: 8, dport: 80 }),
-      Buffer.alloc(0),
-    ]));
+    const r2 = decode(
+      228,
+      Buffer.concat([
+        Buffer.from([
+          0x46, 0x00, 0x00, 0x2a, 0, 0, 0x40, 0x00, 64, 6, 0, 0, 10, 0, 0, 1, 10, 0, 0, 2, 9, 0, 0,
+          0,
+        ]),
+        tcp({ sport: 8, dport: 80 }),
+        Buffer.alloc(0),
+      ]),
+    );
     expect(r2.ip?.headerLen).toBe(24);
     expect(r2.transport?.sport).toBe(8);
     expect(hasError(r2, "ipv4: bad IHL")).toBe(false);
@@ -73,9 +77,9 @@ describe("ipv4 catalog (B)", () => {
   it("ipv4 B6: total length < captured (Ethernet padding) -> trailing pad NOT counted as payload (RFC 894 §3.2.1)", () => {
     // eth + ip(42B) + tcp(22B: header 20 + 2 payload) + 6 pad bytes; IP
     // announces only 42 → the 6 trailing pad bytes must be ignored.
-    const ip = ip4(Buffer.concat([
-      tcp({ sport: 2000, dport: 80, flags: 0x18 }, Buffer.alloc(2, 9)),
-    ])); // total 20+22=42
+    const ip = ip4(
+      Buffer.concat([tcp({ sport: 2000, dport: 80, flags: 0x18 }, Buffer.alloc(2, 9))]),
+    ); // total 20+22=42
     const padded = Buffer.concat([eth(ip, { ethertype: 0x0800 }), Buffer.alloc(6, 0x00)]);
     ip.writeUInt16BE(42, 2); // re-assert: announce only 42 bytes
     const r = decode(1, padded);
@@ -85,7 +89,12 @@ describe("ipv4 catalog (B)", () => {
   });
 
   it("ipv4 B7: version nibble not 4 (0x55) on a bare frame -> error, no throw (RFC 791 §3.1)", () => {
-    const r = decode(228, Buffer.from([0x55, 0x00, 0x00, 0x28, 0x00, 0x00, 0x40, 0x00, 64, 6, 0, 0, 10, 0, 0, 1, 10, 0, 0, 2]));
+    const r = decode(
+      228,
+      Buffer.from([
+        0x55, 0x00, 0x00, 0x28, 0x00, 0x00, 0x40, 0x00, 64, 6, 0, 0, 10, 0, 0, 1, 10, 0, 0, 2,
+      ]),
+    );
     expect(r.ip).toBeUndefined();
     expect(r.errors.length).toBeGreaterThan(0);
   });
@@ -100,10 +109,14 @@ describe("ipv4 catalog (B)", () => {
   });
 
   it("ipv4 B9a: first fragment (MF=1, offset 0) -> transport decoded AND fragment metadata present (RFC 791 §3.2)", () => {
-    const frame = eth(ip4(
-      tcp({ sport: 60, dport: 600, flags: 0x18 }, Buffer.alloc(8, 0xaa)),
-      { id: 99, flags: 1, frag: 0 },
-    ), { ethertype: 0x0800 });
+    const frame = eth(
+      ip4(tcp({ sport: 60, dport: 600, flags: 0x18 }, Buffer.alloc(8, 0xaa)), {
+        id: 99,
+        flags: 1,
+        frag: 0,
+      }),
+      { ethertype: 0x0800 },
+    );
     const r = decode(1, frame);
     expect(r.ip?.fragment?.moreFragments).toBe(true);
     expect(r.ip?.fragment?.offsetBytes).toBe(0);
@@ -122,7 +135,12 @@ describe("ipv4 catalog (B)", () => {
   });
 
   it("ipv4 B9c: last fragment (MF=0, offset > 0) -> metadata only, unique-host bytes intact", () => {
-    const r = decode(1, eth(ip4(Buffer.alloc(16, 0xbb), { proto: 17, id: 78, flags: 0, frag: 4 }), { ethertype: 0x0800 }));
+    const r = decode(
+      1,
+      eth(ip4(Buffer.alloc(16, 0xbb), { proto: 17, id: 78, flags: 0, frag: 4 }), {
+        ethertype: 0x0800,
+      }),
+    );
     expect(r.ip?.fragment?.moreFragments).toBe(false);
     expect(r.ip?.fragment?.offsetBytes).toBe(32);
     expect(r.transport?.kind).toBe("other");
@@ -167,7 +185,8 @@ describe("ipv4 catalog (B)", () => {
   });
 
   it("ipv4 B14: protocol numbers 1/6/17/47/50/89 -> kind mapped, others carry the proto number (RFC 790)", () => {
-    const l4 = (p: number): Buffer => p === 6 ? tcp({ sport: 3, dport: 33 }) : p === 17 ? udp(Buffer.alloc(2)) : Buffer.alloc(8);
+    const l4 = (p: number): Buffer =>
+      p === 6 ? tcp({ sport: 3, dport: 33 }) : p === 17 ? udp(Buffer.alloc(2)) : Buffer.alloc(8);
     const proto = (p: number) => decode(228, ip4(l4(p), { proto: p })).transport;
     expect(proto(1)?.kind).toBe("icmp");
     expect(proto(6)?.kind).toBe("tcp");

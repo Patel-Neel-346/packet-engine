@@ -34,9 +34,7 @@ const ENDPOINT = "example.org"; // approved in Step 0; informal verification
 function safetyCheckPaths(): void {
   for (const p of Object.values(P)) {
     if (p.includes(" ") || p.includes("'") || p.includes('"')) {
-      throw new Error(
-        `elevated runner cannot handle spaces in this prototype: ${p}`,
-      );
+      throw new Error(`elevated runner cannot handle spaces in this prototype: ${p}`);
     }
   }
 }
@@ -85,39 +83,69 @@ function captureScript(): string {
   );
   L.push(`Set-Content -Path $logFile -Value '=== SPT m1 capture ===' -Encoding ascii`);
   L.push(`  Remove-Item -Path (Join-Path '${OUT}' 'm1*.etl') -Force -ErrorAction SilentlyContinue`);
-  L.push(`  Remove-Item -Path (Join-Path '${OUT}' 'm1*.pcapng') -Force -ErrorAction SilentlyContinue`);
+  L.push(
+    `  Remove-Item -Path (Join-Path '${OUT}' 'm1*.pcapng') -Force -ErrorAction SilentlyContinue`,
+  );
   L.push(`  Log '[STEP cleanup] removed previous m1*.etl/pcapng'`);
   L.push(`try {`);
   // 0) Clean state (first stop may fail if no session was active; recorded).
   L.push(`  $o = & $pkt stop 2>&1; Log ('[STEP stop] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
-  L.push(`  $o = & $pkt filter remove 2>&1; Log ('[STEP filterRemove] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
+  L.push(
+    `  $o = & $pkt filter remove 2>&1; Log ('[STEP filterRemove] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
   // 1) Component inventory (admin-gated).
-  L.push(`  $o = & $pkt list --json 2>&1; Log ('[STEP listJson] code=' + $LASTEXITCODE); Set-Content -Path $compFile -Value $o -Encoding utf8`);
+  L.push(
+    `  $o = & $pkt list --json 2>&1; Log ('[STEP listJson] code=' + $LASTEXITCODE); Set-Content -Path $compFile -Value $o -Encoding utf8`,
+  );
   // 2) Resolve the endpoint (only these IPs are filtered).
-  L.push(`  $a4 = @(Resolve-DnsName -Name $epHost -Type A -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -match '^[0-9.]+$' } | ForEach-Object { $_.IPAddress } | Sort-Object -Unique)`);
-  L.push(`  $a6 = @(Resolve-DnsName -Name $epHost -Type AAAA -ErrorAction SilentlyContinue | Where-Object { $_.IP6Address -match '^([0-9a-fA-F]+:){5,7}[0-9a-fA-F]+$' } | ForEach-Object { $_.IP6Address } | Sort-Object -Unique)`);
+  L.push(
+    `  $a4 = @(Resolve-DnsName -Name $epHost -Type A -ErrorAction SilentlyContinue | Where-Object { $_.IPAddress -match '^[0-9.]+$' } | ForEach-Object { $_.IPAddress } | Sort-Object -Unique)`,
+  );
+  L.push(
+    `  $a6 = @(Resolve-DnsName -Name $epHost -Type AAAA -ErrorAction SilentlyContinue | Where-Object { $_.IP6Address -match '^([0-9a-fA-F]+:){5,7}[0-9a-fA-F]+$' } | ForEach-Object { $_.IP6Address } | Sort-Object -Unique)`,
+  );
   L.push(`  Log ('[STEP resolve] a4=' + ($a4 -join ';') + ' a6=' + ($a6 -join ';'))`);
   // 3) Filters (OR-combined per pktmon filter add help; max 32 allowed).
   L.push(`  $i = 0`);
-  L.push(`  foreach ($ip in $a4) { $fname = 'SPT_HTTP4_' + $i; $o = & $pkt filter add $fname -i $ip -t TCP -p 443 2>&1; Log ('[STEP filterAdd4_' + $i + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)); $i++ }`);
+  L.push(
+    `  foreach ($ip in $a4) { $fname = 'SPT_HTTP4_' + $i; $o = & $pkt filter add $fname -i $ip -t TCP -p 443 2>&1; Log ('[STEP filterAdd4_' + $i + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)); $i++ }`,
+  );
   L.push(`  $i = 0`);
-  L.push(`  foreach ($ip in $a6) { $fname = 'SPT_HTTP6_' + $i; $o = & $pkt filter add $fname -i $ip -t TCP -p 443 2>&1; Log ('[STEP filterAdd6_' + $i + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)); $i++ }`);
-  L.push(`  $o = & $pkt filter add SPT_DNS -t UDP -p 53 2>&1; Log ('[STEP filterAddDns] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
-  L.push(`  $o = & $pkt filter list 2>&1; Log ('[STEP filterList] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
+  L.push(
+    `  foreach ($ip in $a6) { $fname = 'SPT_HTTP6_' + $i; $o = & $pkt filter add $fname -i $ip -t TCP -p 443 2>&1; Log ('[STEP filterAdd6_' + $i + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)); $i++ }`,
+  );
+  L.push(
+    `  $o = & $pkt filter add SPT_DNS -t UDP -p 53 2>&1; Log ('[STEP filterAddDns] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
+  L.push(
+    `  $o = & $pkt filter list 2>&1; Log ('[STEP filterList] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
   // 4) Start capture at ETHERNET-medium components of the up link. The
   // NIC miniport on Wi-Fi delivers raw 802.11 (observed in run 1), so we
   // query pktmon's own component list and select: WFP 802.3 filter +
   // TCPIP/TCPIP6 protocol components of the Wi-Fi ifIndex.
-  L.push(`  $up = Get-NetAdapter | Where-Object { $PSItem.Status -eq 'Up' } | Sort-Object ifIndex | Select-Object -First 1`);
+  L.push(
+    `  $up = Get-NetAdapter | Where-Object { $PSItem.Status -eq 'Up' } | Sort-Object ifIndex | Select-Object -First 1`,
+  );
   L.push(`  Log ('[STEP resolveIf] interface=' + $up.Name + ' ifIndex=' + $up.ifIndex)`);
   L.push(`  $comps = Get-Content -Path $compFile -Raw -Encoding UTF8 | ConvertFrom-Json`);
-  L.push(`  $grp = $comps | Where-Object { $_.Components | Where-Object { ($_.Type -eq 'Miniport') -and ($_.Properties | Where-Object { ($_.Name -eq 'ifIndex') -and (($_.Value -as [int]) -eq [int]$up.ifIndex) }) } } | Select-Object -First 1`);
+  L.push(
+    `  $grp = $comps | Where-Object { $_.Components | Where-Object { ($_.Type -eq 'Miniport') -and ($_.Properties | Where-Object { ($_.Name -eq 'ifIndex') -and (($_.Value -as [int]) -eq [int]$up.ifIndex) }) } } | Select-Object -First 1`,
+  );
   L.push(`  if (-not $grp) { throw 'no pktmon component group for the up adapter' }`);
-  L.push(`  $sel = @($grp.Components | Where-Object { ($_.DriverName -ne 'npcap.sys') -and (($_.Name -like 'WFP 802.3*') -or ($_.Name -like 'TCPIP*') -or ((($_.Type -eq 'Filter') -or ($_.Type -eq 'Protocol')) -and ($_.Properties | Where-Object { ($_.Name -eq 'NdisMedium') -and ($_.Value -eq 'Ethernet') }))) } | Select-Object -ExpandProperty Id -Unique)`);
-  L.push(`  if ($sel.Count -eq 0) { throw 'no Ethernet-medium component found for the up adapter' }`);
+  L.push(
+    `  $sel = @($grp.Components | Where-Object { ($_.DriverName -ne 'npcap.sys') -and (($_.Name -like 'WFP 802.3*') -or ($_.Name -like 'TCPIP*') -or ((($_.Type -eq 'Filter') -or ($_.Type -eq 'Protocol')) -and ($_.Properties | Where-Object { ($_.Name -eq 'NdisMedium') -and ($_.Value -eq 'Ethernet') }))) } | Select-Object -ExpandProperty Id -Unique)`,
+  );
+  L.push(
+    `  if ($sel.Count -eq 0) { throw 'no Ethernet-medium component found for the up adapter' }`,
+  );
   L.push(`  Log ('[STEP pickComps] ids=' + (($sel | ForEach-Object { $_ }) -join ';'))`);
-  L.push(`  $o = & $pkt start --capture --comp @sel --pkt-size 0 --log-mode multi-file --file-name $etlFile --file-size 64 2>&1; Log ('[STEP start] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
-  L.push(`  $o = & $pkt status --buffer-info 2>&1; Log ('[STEP status] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
+  L.push(
+    `  $o = & $pkt start --capture --comp @sel --pkt-size 0 --log-mode multi-file --file-name $etlFile --file-size 64 2>&1; Log ('[STEP start] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
+  L.push(
+    `  $o = & $pkt status --buffer-info 2>&1; Log ('[STEP status] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
   // 5) Controlled traffic: two in-box curl HTTPS requests, proxy defeated.
   L.push(`  foreach ($n in 1..2) {`);
   L.push(`    $page = Join-Path $env:TEMP ('spt-page' + $n + '.html')`);
@@ -126,21 +154,35 @@ function captureScript(): string {
   L.push(`    Start-Sleep -Milliseconds 700`);
   L.push(`  }`);
   // 6) Counters, stop, locate actual ETL file(s), convert.
-  L.push(`  $o = & $pkt counters 2>&1; Log ('[STEP counters] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
+  L.push(
+    `  $o = & $pkt counters 2>&1; Log ('[STEP counters] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
   L.push(`  Start-Sleep -Seconds 1`);
-  L.push(`  $o = & $pkt stop 2>&1; Log ('[STEP stopAfter] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
+  L.push(
+    `  $o = & $pkt stop 2>&1; Log ('[STEP stopAfter] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
   // Multi-file mode renames the log with a sequence number (observed:
   // --file-name m1.etl produced m1%d.etl -> m12.etl), so locate by prefix.
-  L.push(`  $etls = @(Get-ChildItem -Path '${OUT}' -Filter 'm1*.etl' | Sort-Object Length -Descending)`);
-  L.push(`  Log ('[STEP etlLocate] files=' + (($etls | ForEach-Object { $_.Name + ':' + $_.Length }) -join ';'))`);
+  L.push(
+    `  $etls = @(Get-ChildItem -Path '${OUT}' -Filter 'm1*.etl' | Sort-Object Length -Descending)`,
+  );
+  L.push(
+    `  Log ('[STEP etlLocate] files=' + (($etls | ForEach-Object { $_.Name + ':' + $_.Length }) -join ';'))`,
+  );
   L.push(`  $main = $etls[0]`);
   L.push(`  $allFile = Join-Path '${OUT}' 'm1_all.pcapng'`);
-  L.push(`  $o = & $pkt etl2pcap $main.FullName --out $allFile 2>&1; Log ('[STEP etl2pcapAll] code=' + $LASTEXITCODE + ' ' + (Clip $o))`);
-  L.push(`  foreach ($cid in $sel) { $o = & $pkt etl2pcap $main.FullName --component-id $cid --out (Join-Path '${OUT}' ('m1_comp' + $cid + '.pcapng')) 2>&1; Log ('[STEP etl2pcapComp' + $cid + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)) }`);
+  L.push(
+    `  $o = & $pkt etl2pcap $main.FullName --out $allFile 2>&1; Log ('[STEP etl2pcapAll] code=' + $LASTEXITCODE + ' ' + (Clip $o))`,
+  );
+  L.push(
+    `  foreach ($cid in $sel) { $o = & $pkt etl2pcap $main.FullName --component-id $cid --out (Join-Path '${OUT}' ('m1_comp' + $cid + '.pcapng')) 2>&1; Log ('[STEP etl2pcapComp' + $cid + '] code=' + $LASTEXITCODE + ' ' + (Clip $o)) }`,
+  );
   L.push(`  if (Test-Path $allFile) { Copy-Item $allFile $pcapFile -Force }`);
   L.push(`  if (Test-Path $pcapFile) {`);
   L.push(`    $sz = (Get-Item $pcapFile).Length`);
-  L.push(`    if ($sz -gt 0) { Log ('[RESULT] OK size=' + $sz) } else { Log '[RESULT] FAIL empty-pcapng'; $code = 3 }`);
+  L.push(
+    `    if ($sz -gt 0) { Log ('[RESULT] OK size=' + $sz) } else { Log '[RESULT] FAIL empty-pcapng'; $code = 3 }`,
+  );
   L.push(`  }`);
   L.push(`} catch {`);
   L.push(`  Log ('[ERROR] ' + $PSItem.Exception.Message)`);
@@ -163,9 +205,7 @@ export async function m1Capture(): Promise<number> {
   console.log("== m1-capture: non-elevated prechecks (no UAC) ==");
   const status = await runPktmon(["status"]);
   const statusOneLine = status.stdout.trim().replace(/\r?\n/g, " | ") || status.stderr.trim();
-  console.log(
-    `pktmon status (non-elevated): exit=${status.code} out="${statusOneLine}"`,
-  );
+  console.log(`pktmon status (non-elevated): exit=${status.code} out="${statusOneLine}"`);
   if (status.code === 0) {
     console.log(
       "NOTE: this shell already seems elevated; the UAC prompt will be auto-approved without interaction.",
@@ -201,16 +241,10 @@ export async function m1Capture(): Promise<number> {
     const out = s.output.length > 300 ? s.output.slice(0, 300) + " ..." : s.output;
     console.log(`  [${s.name}] code=${s.code ?? "?"} ${out}`);
   }
-  const resultLine = res.logContent
-    .split(/\r?\n/)
-    .find((l) => l.startsWith("[RESULT]"));
+  const resultLine = res.logContent.split(/\r?\n/).find((l) => l.startsWith("[RESULT]"));
   console.log(`\n${resultLine ?? "[RESULT] missing"}`);
 
   const pcapSize = fs.existsSync(P.pcapng) ? fs.statSync(P.pcapng).size : 0;
-  console.log(
-    `PCAPNG: ${P.pcapng} (${pcapSize} bytes)\nNext: npm run m1:verify`,
-  );
-  return resultLine === "[RESULT] OK" || resultLine?.startsWith("[RESULT] OK")
-    ? 0
-    : 3;
+  console.log(`PCAPNG: ${P.pcapng} (${pcapSize} bytes)\nNext: npm run m1:verify`);
+  return resultLine === "[RESULT] OK" || resultLine?.startsWith("[RESULT] OK") ? 0 : 3;
 }

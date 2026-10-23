@@ -46,17 +46,17 @@ Results: `test-results/milestone2-core.md`, `test-results/milestone2-ext.md`
 
 ## Core batch results (all requirements hit)
 
-| scenario | uniquePkts | dupsMerged | parity | unsupported | traceEPBs |
-|---|---|---|---|---|---|
-| s1_https | 84 | 168 | **100%** | 0 | 252 |
-| s2_http_external | 33 | 66 | **100%** | 0 | 99 |
-| s3_dns | 24 | 48 | **100%** | 0 | 72 |
-| s4_large | 1565 | 3130 | **100%** | 0 | 4695 |
-| s5_tcp_lifecycle | 181 | 362 | **100%** | 0 | 543 |
-| s6_v4v6 | 66 | 132 | **100%** | 0 | 198 |
-| s7_parallel | 172 | 344 | **100%** | 0 | 516 |
-| s8_icmp | 10 | 20 | **100%** | 0 | 30 |
-| s15_tlshello | 42 | 84 | **100%** | 0 | 126 |
+| scenario         | uniquePkts | dupsMerged | parity   | unsupported | traceEPBs |
+| ---------------- | ---------- | ---------- | -------- | ----------- | --------- |
+| s1_https         | 84         | 168        | **100%** | 0           | 252       |
+| s2_http_external | 33         | 66         | **100%** | 0           | 99        |
+| s3_dns           | 24         | 48         | **100%** | 0           | 72        |
+| s4_large         | 1565       | 3130       | **100%** | 0           | 4695      |
+| s5_tcp_lifecycle | 181        | 362        | **100%** | 0           | 543       |
+| s6_v4v6          | 66         | 132        | **100%** | 0           | 198       |
+| s7_parallel      | 172        | 344        | **100%** | 0           | 516       |
+| s8_icmp          | 10         | 20         | **100%** | 0           | 30        |
+| s15_tlshello     | 42         | 84         | **100%** | 0           | 126       |
 
 Every trace converted with the largest ETL (`--file-name`, multi-file mode); copies merged at exactly 3 per unique
 packet in clean scenarios (comp36-ethernet + comp36-raw-802.11 + tcpip copy). s1 had **2 kernel drop(s)** reported by
@@ -65,15 +65,15 @@ Flows matched tshark on every scenario (`flowsMatch: true`).
 
 ## Extended batch results (coverage reported honestly)
 
-| scenario | uniquePkts | parity | extras | verdict |
-|---|---|---|---|---|
-| s9_quic (headless Edge, UDP/443) | 1440 | **100%** | quicFrames=370, udp443=374 | Edge did negotiate HTTP/3; 370 QUIC datagrams captured, identified on UDP/443 with 100% parity. No decryption attempted. |
-| s2_local_split (local HTTP, split segs) | — | n/a | 0 EPBs | **Finding A**: pktmon sees NO loopback traffic (see below). Traffic itself verified working (3× HTTP 200 with split segments). |
-| s10_arpdhcp | 14 | 14.3% | comp36 arp=3, comp75 arp=3, comp13 arp=0 | ARP captured through nwifi + TCPIP-pseudo components; the 12 "unsupported" are copies whose framing carries an unknown EtherType (0x4dba, raw-802.11-style with variant sub-headers) — by addendum they count as unsupported, not matches. `ipconfig /renew` exit 0 but reported "media disconnected / No operation..." on its adapters — DHCP DORA capture not elicited (finding). |
-| s11_loopback (Test C) | — | n/a | c13=c33=c36=c74=c75=0, epbsAll=0 | **Definitive**: run with `--comp all` plus per-component conversions — TCP and UDP loopback traffic (verified flowing in-process, exit 0) is invisible to every listed pktmon component on this Windows build. |
-| s12_retrans (4× 8MB parallel TLS) | 12129 | **100%** | tsharkRetransmissions=8421 | Saturation produced heavy retransmission traffic; our dedupe did not collapse the retransmitted byte-identical segments (dups are exactly 2× unique = pure copy triples); all 12129 unique packets matched tshark fields. |
-| s13_ws (local WebSocket upgrade) | — | n/a | 0 EPBs | Same Finding A. WS upgrade itself verified (101 + frame exchanged twice). |
-| s14_burst (100 MB download) | 42 | **100%** | tsharkFrameCount=126 | **Finding B**: `speed.cloudflare.com/__down?bytes=100000000` returned **HTTP 403 (1 byte)** — the remote refused the burst, so only the handshake/error/cleanup packets exist. Capture-side parity is 100% on what flowed. |
+| scenario                                | uniquePkts | parity   | extras                                   | verdict                                                                                                                                                                                                                                                                                                                                                                             |
+| --------------------------------------- | ---------- | -------- | ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| s9_quic (headless Edge, UDP/443)        | 1440       | **100%** | quicFrames=370, udp443=374               | Edge did negotiate HTTP/3; 370 QUIC datagrams captured, identified on UDP/443 with 100% parity. No decryption attempted.                                                                                                                                                                                                                                                            |
+| s2_local_split (local HTTP, split segs) | —          | n/a      | 0 EPBs                                   | **Finding A**: pktmon sees NO loopback traffic (see below). Traffic itself verified working (3× HTTP 200 with split segments).                                                                                                                                                                                                                                                      |
+| s10_arpdhcp                             | 14         | 14.3%    | comp36 arp=3, comp75 arp=3, comp13 arp=0 | ARP captured through nwifi + TCPIP-pseudo components; the 12 "unsupported" are copies whose framing carries an unknown EtherType (0x4dba, raw-802.11-style with variant sub-headers) — by addendum they count as unsupported, not matches. `ipconfig /renew` exit 0 but reported "media disconnected / No operation..." on its adapters — DHCP DORA capture not elicited (finding). |
+| s11_loopback (Test C)                   | —          | n/a      | c13=c33=c36=c74=c75=0, epbsAll=0         | **Definitive**: run with `--comp all` plus per-component conversions — TCP and UDP loopback traffic (verified flowing in-process, exit 0) is invisible to every listed pktmon component on this Windows build.                                                                                                                                                                      |
+| s12_retrans (4× 8MB parallel TLS)       | 12129      | **100%** | tsharkRetransmissions=8421               | Saturation produced heavy retransmission traffic; our dedupe did not collapse the retransmitted byte-identical segments (dups are exactly 2× unique = pure copy triples); all 12129 unique packets matched tshark fields.                                                                                                                                                           |
+| s13_ws (local WebSocket upgrade)        | —          | n/a      | 0 EPBs                                   | Same Finding A. WS upgrade itself verified (101 + frame exchanged twice).                                                                                                                                                                                                                                                                                                           |
+| s14_burst (100 MB download)             | 42         | **100%** | tsharkFrameCount=126                     | **Finding B**: `speed.cloudflare.com/__down?bytes=100000000` returned **HTTP 403 (1 byte)** — the remote refused the burst, so only the handshake/error/cleanup packets exist. Capture-side parity is 100% on what flowed.                                                                                                                                                          |
 
 **Finding A (loopback invisible)** is the honest Test C answer for this machine/Windows 11 build 26200: pktmon
 (approximately) exposes NIC-anchored and TCPIP pseudo components but never surfaces 127.0.0.1/site-IP-local traffic.
@@ -82,7 +82,7 @@ milestone's scope and recorded, not hidden.
 
 ## Fixes made during the milestone (all root-caused, none papered over)
 
-1. **Stale-signal desync (2nd core run)**: `waitFor()` accepted signal files from the *previous* batch → Node finished
+1. **Stale-signal desync (2nd core run)**: `waitFor()` accepted signal files from the _previous_ batch → Node finished
    all 9 traffic generations before the bundle started (every window waited its full deadline on a deleted file; traces
    contained only background traffic). Fix: `runBundle` deletes all stale `*.capturestarted`/`*.trafficdone`/
    `*.capturedone`/`_bundle.*` before launch, and `waitForFresh()` requires signal mtime ≥ bundle launch.
@@ -116,7 +116,7 @@ milestone's scope and recorded, not hidden.
   s11, s13 report it as a finding rather than a number.
 - s10 parity is 14.3% by design: ARP frames are not IP; their packet content cannot be field-compared with the current
   oracle columns (frame-level len/timestamp comparisons only). "Unsupported" counts them out of matches per addendum.
-- s14's intended 100 MB burst was refused by the remote (403) — the scenario's *capture* behaves correctly.
+- s14's intended 100 MB burst was refused by the remote (403) — the scenario's _capture_ behaves correctly.
 - All 9 core+ext scenario traces use port filters, so some LAN background TLS/UDP noise flows appear in each trace
   (s1: ~80 background packets). They are parsed by both decoders and matched; scenario traffic is clearly identifiable
   by its flows.

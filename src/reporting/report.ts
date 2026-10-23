@@ -18,7 +18,11 @@ import { bytesLabel } from "../engine/flows.ts";
 
 // ─── mini template helpers ───────────────────────────────────────────────────
 
-function h(tag: string, attrs: Record<string, string | number | boolean>, ...children: string[]): string {
+function h(
+  tag: string,
+  attrs: Record<string, string | number | boolean>,
+  ...children: string[]
+): string {
   const attrStr = Object.entries(attrs)
     .map(([k, v]) => (typeof v === "boolean" ? (v ? k : "") : `${k}="${esc(String(v))}"`))
     .filter(Boolean)
@@ -28,7 +32,11 @@ function h(tag: string, attrs: Record<string, string | number | boolean>, ...chi
 }
 
 function esc(s: string): string {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  return s
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
 
 function e(s: string | number | null | undefined): string {
@@ -50,7 +58,8 @@ function tcpBadge(f: Flow): string {
   if (t.handshakeComplete) parts.push('<span class="badge ok">3WHS</span>');
   if (t.rst) parts.push('<span class="badge warn">RST</span>');
   if (t.finA2b && t.finB2a) parts.push('<span class="badge info">FIN</span>');
-  if (f.uniqueRetransSegs > 0) parts.push(`<span class="badge warn">RT:${f.uniqueRetransSegs}</span>`);
+  if (f.uniqueRetransSegs > 0)
+    parts.push(`<span class="badge warn">RT:${f.uniqueRetransSegs}</span>`);
   return parts.join(" ");
 }
 
@@ -72,25 +81,33 @@ function renderFlowDetail(f: Flow, idx: number): string {
       ["Data segs", String(t.dataSegs)],
     ];
     parts.push('<table class="detail-table">');
-    for (const [k, v] of cells)
-      parts.push(`<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`);
+    for (const [k, v] of cells) parts.push(`<tr><th>${e(k)}</th><td>${e(v)}</td></tr>`);
     parts.push("</table>");
 
     for (const dir of ["a2b", "b2a"] as const) {
       const s = t[dir];
       if (!s || s.segments === 0) continue;
-      const label = dir === "a2b"
-        ? `→ ${e(f.a.ip)}:${f.a.port} → ${e(f.b.ip)}:${f.b.port}`
-        : `← ${e(f.b.ip)}:${f.b.port} → ${e(f.a.ip)}:${f.a.port}`;
+      const label =
+        dir === "a2b"
+          ? `→ ${e(f.a.ip)}:${f.a.port} → ${e(f.b.ip)}:${f.b.port}`
+          : `← ${e(f.b.ip)}:${f.b.port} → ${e(f.a.ip)}:${f.a.port}`;
       parts.push(`<div class="section-title">Stream ${label}</div>`);
       parts.push('<table class="detail-table">');
       parts.push(`<tr><th>Segments</th><td>${s.segments}</td></tr>`);
       parts.push(`<tr><th>Reassembled bytes</th><td>${bytesLabel(s.bytes.length)}</td></tr>`);
-      parts.push(`<tr><th>Gaps</th><td>${s.gapCount} (${bytesLabel(s.gapBytes)} zero-filled)</td></tr>`);
-      parts.push(`<tr><th>Retransmissions</th><td>${s.retransSegs} (${bytesLabel(s.retransBytes)})</td></tr>`);
-      if (s.partialRetransSegs) parts.push(`<tr><th>Partial retrans</th><td>${s.partialRetransSegs}</td></tr>`);
-      if (s.truncatedPayloads) parts.push(`<tr><th>Truncated payloads</th><td>${s.truncatedPayloads}</td></tr>`);
-      parts.push(`<tr><th>Base assumed</th><td>${s.baseAssumed ? "Yes (no SYN seen)" : "No"}</td></tr>`);
+      parts.push(
+        `<tr><th>Gaps</th><td>${s.gapCount} (${bytesLabel(s.gapBytes)} zero-filled)</td></tr>`,
+      );
+      parts.push(
+        `<tr><th>Retransmissions</th><td>${s.retransSegs} (${bytesLabel(s.retransBytes)})</td></tr>`,
+      );
+      if (s.partialRetransSegs)
+        parts.push(`<tr><th>Partial retrans</th><td>${s.partialRetransSegs}</td></tr>`);
+      if (s.truncatedPayloads)
+        parts.push(`<tr><th>Truncated payloads</th><td>${s.truncatedPayloads}</td></tr>`);
+      parts.push(
+        `<tr><th>Base assumed</th><td>${s.baseAssumed ? "Yes (no SYN seen)" : "No"}</td></tr>`,
+      );
       parts.push(`<tr><th>Overflowed (>8MiB)</th><td>${s.overflowed}</td></tr>`);
       parts.push("</table>");
     }
@@ -98,11 +115,17 @@ function renderFlowDetail(f: Flow, idx: number): string {
 
   if (f.http) {
     parts.push('<div class="section-title">HTTP/1.x Messages</div>');
-    parts.push('<table class="detail-table"><tr><th>Dir</th><th>Method</th><th>URI</th><th>Status</th><th>Len</th><th>Complete</th></tr>');
+    parts.push(
+      '<table class="detail-table"><tr><th>Dir</th><th>Method</th><th>URI</th><th>Status</th><th>Len</th><th>Complete</th></tr>',
+    );
     for (const r of f.http.requests)
-      parts.push(`<tr><td>→</td><td>${e(r.method)}</td><td class="uri">${e(r.uri)}</td><td>—</td><td>${r.contentLength ?? "—"}</td><td>${r.bodyComplete ? "✅" : "❌"}</td></tr>`);
+      parts.push(
+        `<tr><td>→</td><td>${e(r.method)}</td><td class="uri">${e(r.uri)}</td><td>—</td><td>${r.contentLength ?? "—"}</td><td>${r.bodyComplete ? "✅" : "❌"}</td></tr>`,
+      );
     for (const r of f.http.responses)
-      parts.push(`<tr><td>←</td><td>—</td><td>—</td><td>${r.status}</td><td>${r.contentLength ?? (r.chunked ? "chunked" : "—")}</td><td>${r.bodyComplete ? "✅" : "❌"}</td></tr>`);
+      parts.push(
+        `<tr><td>←</td><td>—</td><td>—</td><td>${r.status}</td><td>${r.contentLength ?? (r.chunked ? "chunked" : "—")}</td><td>${r.bodyComplete ? "✅" : "❌"}</td></tr>`,
+      );
     parts.push("</table>");
     parts.push(`<p class="small">Parsing stopped: <code>${e(f.http.parsingStopped)}</code></p>`);
   }
@@ -127,16 +150,20 @@ export function generateHtml(a: FlowAnalysis): string {
     ["Flows", a.flows.length],
     ["Non-flow EPBs", a.nonFlowEpbs],
     ["Retrans segs", a.retransSegsTotal],
-  ].map(([label, val]) =>
-    `<div class="card"><div class="card-val">${e(val)}</div><div class="card-label">${e(label)}</div></div>`
-  ).join("");
+  ]
+    .map(
+      ([label, val]) =>
+        `<div class="card"><div class="card-val">${e(val)}</div><div class="card-label">${e(label)}</div></div>`,
+    )
+    .join("");
 
   // Flow rows
-  const flowRows = a.flows.map((f, i) => {
-    const totalBytes = f.bytes.a2b + f.bytes.b2a;
-    const barW = Math.round((totalBytes / maxBytes) * 100);
-    const label = flowLabel(f);
-    return `
+  const flowRows = a.flows
+    .map((f, i) => {
+      const totalBytes = f.bytes.a2b + f.bytes.b2a;
+      const barW = Math.round((totalBytes / maxBytes) * 100);
+      const label = flowLabel(f);
+      return `
     <tr class="flow-row" onclick="toggle(${i})">
       <td class="mono">${i + 1}</td>
       <td><span class="kind-badge ${e(f.kind)}">${e(f.kind.toUpperCase())}</span></td>
@@ -154,7 +181,8 @@ export function generateHtml(a: FlowAnalysis): string {
       <td class="num">${Math.round((f.lastTs - f.firstTs) * 1000)} ms</td>
     </tr>
     <tr class="detail-row" id="dr${i}"><td colspan="9">${renderFlowDetail(f, i)}</td></tr>`;
-  }).join("");
+    })
+    .join("");
 
   // DNS table
   const dnsTable = a.dnsHostByIp.length

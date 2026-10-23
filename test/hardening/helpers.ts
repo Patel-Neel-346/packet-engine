@@ -38,10 +38,7 @@ export type EthernetOpts = {
 
 /** Ethernet II frame (optionally VLAN-stacked) around an L3 payload. */
 export function eth(payload: Buffer, o: EthernetOpts = {}): Buffer {
-  const parts = [
-    macBytes(o.dst ?? "020203040506"),
-    macBytes(o.src ?? "020203040507"),
-  ];
+  const parts = [macBytes(o.dst ?? "020203040506"), macBytes(o.src ?? "020203040507")];
   const vlans = o.vlans ?? [];
   vlans.forEach((id, i) => {
     const tpid = o.tpids?.[i] ?? 0x8100;
@@ -75,7 +72,7 @@ export type Ip4Opts = {
 export function ip4(payload: Buffer, o: Ip4Opts = {}): Buffer {
   const ihl = o.ihl ?? 20;
   const h = Buffer.alloc(ihl);
-  h[0] = ((o.versionNibble ?? 4) << 4) | ihl / 4;
+  h[0] = ((o.versionNibble ?? 4) << 4) | (ihl / 4);
   h.writeUInt16BE(o.totalLen ?? ihl + payload.length, 2);
   h.writeUInt16BE(o.id ?? 0x1234, 4);
   h.writeUInt16BE(((o.flags ?? 2) << 13) | (o.frag ?? 0), 6);
@@ -83,7 +80,10 @@ export function ip4(payload: Buffer, o: Ip4Opts = {}): Buffer {
   h[9] = o.proto ?? 6;
   const s = "10.0.0.1".split(".");
   const d = "10.0.0.2".split(".");
-  for (let i = 0; i < 4; i++) { h[12 + i] = Number(s[i]); h[16 + i] = Number(d[i]); }
+  for (let i = 0; i < 4; i++) {
+    h[12 + i] = Number(s[i]);
+    h[16 + i] = Number(d[i]);
+  }
   if (!o.checksumZero && !o.corruptChecksum) {
     let sum = 0;
     for (let i = 0; i < ihl; i += 2) sum += h.readUInt16BE(i);
@@ -114,11 +114,18 @@ export function tcpOptionMss(mss: number): Buffer {
   return b;
 }
 
-export function tcpOptionWs(ws: number): Buffer { return Buffer.from([3, 3, ws]); }
-export function tcpOptionSackPermitted(): Buffer { return Buffer.from([4, 2]); }
+export function tcpOptionWs(ws: number): Buffer {
+  return Buffer.from([3, 3, ws]);
+}
+export function tcpOptionSackPermitted(): Buffer {
+  return Buffer.from([4, 2]);
+}
 export function tcpOptionTimestamps(val: number, echo: number): Buffer {
-  const b = Buffer.alloc(10); b[0] = 8; b[1] = 10;
-  b.writeUInt32BE(val >>> 0, 2); b.writeUInt32BE(echo >>> 0, 6);
+  const b = Buffer.alloc(10);
+  b[0] = 8;
+  b[1] = 10;
+  b.writeUInt32BE(val >>> 0, 2);
+  b.writeUInt32BE(echo >>> 0, 6);
   return b;
 }
 
@@ -162,7 +169,11 @@ export function udp(payload: Buffer, o: UdpOpts = {}): Buffer {
 
 /** DNS quick-builder: header + labeled questions. */
 export function dnsMsg(o: {
-  id?: number; isResponse?: boolean; rcode?: number; qd?: number; an?: number;
+  id?: number;
+  isResponse?: boolean;
+  rcode?: number;
+  qd?: number;
+  an?: number;
   questions?: Array<{ name: string; type: number }>;
 }): Buffer {
   const parts: Buffer[] = [];
@@ -223,7 +234,10 @@ export function buildExt(spec: ExtSpec, afterNh: number): Buffer {
   b[0] = afterNh; // NextHeader is derived from the header that follows
   b[1] = spec.units;
   // filler bytes: hop-by-hop 0x00 options, routing type 0/segmentsLeft 0, dst-opt 0 options
-  if (spec.kind === "routing") { b[2] = 0; b[3] = 0; }
+  if (spec.kind === "routing") {
+    b[2] = 0;
+    b[3] = 0;
+  }
   return b;
 }
 
@@ -245,12 +259,20 @@ export type Ip6Opts = {
 export function ip6(payload: Buffer, o: Ip6Opts = {}): Buffer {
   const extsBytes: Buffer[] = [];
   const nhOf = (s: ExtSpec): number =>
-    s.kind === "frag" ? 44 : s.kind === "hbh" ? 0 : s.kind === "routing" ? 43 : s.kind === "ah" ? 51 : 60;
+    s.kind === "frag"
+      ? 44
+      : s.kind === "hbh"
+        ? 0
+        : s.kind === "routing"
+          ? 43
+          : s.kind === "ah"
+            ? 51
+            : 60;
   // unwinding: the LAST spec's NH is `o.nh`, intermediates chain to the next.
   for (let i = 0; i < (o.exts?.length ?? 0); i++) {
     const spec = o.exts![i];
     const nextSpec = o.exts![i + 1];
-    const after = nextSpec ? nhOf(nextSpec) : o.nh ?? 6;
+    const after = nextSpec ? nhOf(nextSpec) : (o.nh ?? 6);
     extsBytes.push(buildExt(spec, after));
   }
   const head = Buffer.alloc(40);
@@ -260,8 +282,10 @@ export function ip6(payload: Buffer, o: Ip6Opts = {}): Buffer {
   head[7] = o.hopLimit ?? 64;
   const src = o.src ?? "20010db8000000000000000000000001";
   const dst = o.dst ?? "20010db8000000000000000000000002";
-  const sb = Buffer.from(src, "hex"); const db = Buffer.from(dst, "hex");
-  sb.copy(head, 8); db.copy(head, 24);
+  const sb = Buffer.from(src, "hex");
+  const db = Buffer.from(dst, "hex");
+  sb.copy(head, 8);
+  db.copy(head, 24);
   const body = Buffer.concat([...extsBytes, payload]);
   const realPayloadLen = o.payloadLenOverride ?? body.length;
   head.writeUInt16BE(realPayloadLen & 0xffff, 4);
@@ -292,7 +316,8 @@ export function decode(linkType: number, bytes: Buffer, origLen = bytes.length):
 export function mulberry32(seed: number): () => number {
   let a = seed >>> 0;
   return () => {
-    a |= 0; a = (a + 0x6d2b79f5) | 0;
+    a |= 0;
+    a = (a + 0x6d2b79f5) | 0;
     let t = Math.imul(a ^ (a >>> 15), 1 | a);
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;

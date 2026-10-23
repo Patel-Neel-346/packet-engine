@@ -33,10 +33,7 @@ export interface PcapngWriteOptions {
 }
 
 /** Serialize Ethernet-framed chunks to a complete PCAPNG file buffer. */
-export function writePcapng(
-  chunks: PcapngChunk[],
-  opts?: Partial<PcapngWriteOptions>,
-): Buffer {
+export function writePcapng(chunks: PcapngChunk[], opts?: Partial<PcapngWriteOptions>): Buffer {
   const linkType = opts?.linkType ?? 1;
   const snapLen = opts?.snapLen ?? 262144;
   const parts: Buffer[] = [];
@@ -48,7 +45,9 @@ export function writePcapng(
     body.writeUInt16LE(1, 4);
     body.writeUInt16LE(0, 6);
     body.writeBigUInt64LE(0xffffffffffffffffn, 8);
-    const opt = opts?.userAppl ? optionItem(4, Buffer.from(opts.userAppl, "utf8")) : Buffer.alloc(0);
+    const opt = opts?.userAppl
+      ? optionItem(4, Buffer.from(opts.userAppl, "utf8"))
+      : Buffer.alloc(0);
     parts.push(blockBody(SHB_BLOCK, Buffer.concat([body, opt])));
   }
 

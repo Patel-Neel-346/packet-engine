@@ -117,7 +117,7 @@ const tapRoleSym = Symbol("strobe.tap.role");
 
 function randomIsn(): number {
   // prototype-grade ISN: nonzero, halved entropy (avoid near-wrap values)
-  return (crypto.randomBytes(4).readUInt32BE(0) >>> 1) || 0x10000;
+  return crypto.randomBytes(4).readUInt32BE(0) >>> 1 || 0x10000;
 }
 
 /** "::ffff:127.0.0.1" ↔ "127.0.0.1" normalization for tuple matching. */
@@ -158,9 +158,7 @@ export class LoopbackTap {
     // The originals are plain standalone functions in node's net/dgram
     // modules (no internal `this` needed); the loose rest-parameter casts
     // exist because their public typings are overload unions.
-    const origCC = net.createConnection.bind(net) as unknown as (
-      ...a: unknown[]
-    ) => net.Socket;
+    const origCC = net.createConnection.bind(net) as unknown as (...a: unknown[]) => net.Socket;
     this.origCreateConnection = origCC;
     (net as unknown as { createConnection: unknown }).createConnection =
       function tappedCreateConnection(...args: unknown[]): net.Socket {
@@ -169,43 +167,41 @@ export class LoopbackTap {
         return sock;
       };
 
-    const origCS = net.createServer.bind(net) as unknown as (
-      ...a: unknown[]
-    ) => net.Server;
+    const origCS = net.createServer.bind(net) as unknown as (...a: unknown[]) => net.Server;
     this.origCreateServer = origCS;
-    (net as unknown as { createServer: unknown }).createServer =
-      function tappedCreateServer(...args: unknown[]): net.Server {
-        let handler: unknown;
-        let hasHandler = false;
-        for (const a of args) {
-          if (typeof a === "function") {
-            handler = a;
-            hasHandler = true;
-            break;
-          }
+    (net as unknown as { createServer: unknown }).createServer = function tappedCreateServer(
+      ...args: unknown[]
+    ): net.Server {
+      let handler: unknown;
+      let hasHandler = false;
+      for (const a of args) {
+        if (typeof a === "function") {
+          handler = a;
+          hasHandler = true;
+          break;
         }
-        if (!hasHandler) return origCS(...args);
-        // Arrow wrapper: node calls connection handlers with the server as
-        // `this`, but the local scenario handlers never use it (verified in
-        // traffic.ts/localservers.ts).
-        const wrapped = (...cell: unknown[]): void => {
-          tap.instrumentAccepted(cell[0] as net.Socket);
-          (handler as (...a: unknown[]) => void)(...cell);
-        };
-        if (typeof args[0] === "function") return origCS(wrapped);
-        return origCS(args[0], wrapped);
+      }
+      if (!hasHandler) return origCS(...args);
+      // Arrow wrapper: node calls connection handlers with the server as
+      // `this`, but the local scenario handlers never use it (verified in
+      // traffic.ts/localservers.ts).
+      const wrapped = (...cell: unknown[]): void => {
+        tap.instrumentAccepted(cell[0] as net.Socket);
+        (handler as (...a: unknown[]) => void)(...cell);
       };
+      if (typeof args[0] === "function") return origCS(wrapped);
+      return origCS(args[0], wrapped);
+    };
 
-    const origDS = dgram.createSocket.bind(dgram) as unknown as (
-      ...a: unknown[]
-    ) => dgram.Socket;
+    const origDS = dgram.createSocket.bind(dgram) as unknown as (...a: unknown[]) => dgram.Socket;
     this.origCreateSocket = origDS;
-    (dgram as unknown as { createSocket: unknown }).createSocket =
-      function tappedCreateSocket(...args: unknown[]): dgram.Socket {
-        const sock = origDS(...args);
-        tap.instrumentUdpSocket(sock);
-        return sock;
-      };
+    (dgram as unknown as { createSocket: unknown }).createSocket = function tappedCreateSocket(
+      ...args: unknown[]
+    ): dgram.Socket {
+      const sock = origDS(...args);
+      tap.instrumentUdpSocket(sock);
+      return sock;
+    };
   }
 
   disarm(): void {
@@ -216,12 +212,10 @@ export class LoopbackTap {
         this.origCreateConnection;
     }
     if (this.origCreateServer) {
-      (net as unknown as { createServer: unknown }).createServer =
-        this.origCreateServer;
+      (net as unknown as { createServer: unknown }).createServer = this.origCreateServer;
     }
     if (this.origCreateSocket) {
-      (dgram as unknown as { createSocket: unknown }).createSocket =
-        this.origCreateSocket;
+      (dgram as unknown as { createSocket: unknown }).createSocket = this.origCreateSocket;
     }
     this.origCreateConnection = null;
     this.origCreateServer = null;
@@ -321,9 +315,7 @@ export class LoopbackTap {
     });
 
     sock.on("close", () => tap.finalizeConn(c));
-    sock.on("error", (e: Error) =>
-      tap.warn(`conn#${c.id} client-side error: ${e.message}`),
-    );
+    sock.on("error", (e: Error) => tap.warn(`conn#${c.id} client-side error: ${e.message}`));
 
     this.wrapTcpSend(sock, c, "client");
     this.observeTcpReceive(sock, c, "client");
@@ -358,19 +350,13 @@ export class LoopbackTap {
     c.serverPort = c.serverPort || socket.localPort || 0;
     const tap = this;
     socket.on("close", () => tap.finalizeConn(c));
-    socket.on("error", (e: Error) =>
-      tap.warn(`conn#${c.id} server-side error: ${e.message}`),
-    );
+    socket.on("error", (e: Error) => tap.warn(`conn#${c.id} server-side error: ${e.message}`));
     this.wrapTcpSend(socket, c, "server");
     this.observeTcpReceive(socket, c, "server");
   }
 
   /** Record every byte this socket SENDS (verbatim, timestamped). */
-  private wrapTcpSend(
-    sock: net.Socket,
-    c: TcpTapConn,
-    role: "client" | "server",
-  ): void {
+  private wrapTcpSend(sock: net.Socket, c: TcpTapConn, role: "client" | "server"): void {
     const tap = this;
     const dir: Dir = role === "client" ? "c2s" : "s2c";
     const origWrite = sock.write.bind(sock);
@@ -393,9 +379,7 @@ export class LoopbackTap {
       return (origWrite as (...a: unknown[]) => boolean)(...args);
     };
 
-    (sock as unknown as { end: unknown }).end = function tappedEnd(
-      ...args: unknown[]
-    ): net.Socket {
+    (sock as unknown as { end: unknown }).end = function tappedEnd(...args: unknown[]): net.Socket {
       const chunk = args[0];
       if (
         chunk !== null &&
@@ -417,11 +401,7 @@ export class LoopbackTap {
   }
 
   /** Receive side: observed data synthesizes a pure ACK from this side only. */
-  private observeTcpReceive(
-    sock: net.Socket,
-    c: TcpTapConn,
-    role: "client" | "server",
-  ): void {
+  private observeTcpReceive(sock: net.Socket, c: TcpTapConn, role: "client" | "server"): void {
     const tap = this;
     const ackDir: Dir = role === "client" ? "c2s" : "s2c";
     sock.on("data", (chunk: Buffer) => {
@@ -459,9 +439,7 @@ export class LoopbackTap {
     const tap = this;
     const origSend = sock.send.bind(sock);
 
-    (sock as unknown as { send: unknown }).send = function tappedSend(
-      ...args: unknown[]
-    ): unknown {
+    (sock as unknown as { send: unknown }).send = function tappedSend(...args: unknown[]): unknown {
       const parsed = parseSendArgs(args);
       if (parsed) {
         u.events.push({
@@ -501,8 +479,7 @@ export class LoopbackTap {
    * SYN-ACK at handshake-complete timestamps. */
   synthesizeTcpFrames(c: TcpTapConn): { chunks: PcapngChunk[]; story: TcpStory } {
     const chunks: PcapngChunk[] = [];
-    const storyEnds = () =>
-      c.ends.map((e) => ({ dir: e.dir, ts: e.ts }));
+    const storyEnds = () => c.ends.map((e) => ({ dir: e.dir, ts: e.ts }));
     const story: TcpStory = {
       id: c.id,
       proto4: c.proto4,
@@ -529,14 +506,7 @@ export class LoopbackTap {
     const isnS = randomIsn();
     let cNext = (isnC + 1) >>> 0;
     let sNext = (isnS + 1) >>> 0;
-    const push = (
-      ts: UsTs,
-      dir: Dir,
-      flags: number,
-      payload: Buffer,
-      seq: number,
-      ack: number,
-    ) => {
+    const push = (ts: UsTs, dir: Dir, flags: number, payload: Buffer, seq: number, ack: number) => {
       const data = ethernetTcpFrame(c, dir, flags, payload, seq, ack);
       chunks.push({ data, origLen: data.length, ts: ts / 1e6 });
     };
@@ -611,10 +581,7 @@ export class LoopbackTap {
   }
 
   /** Write the tap's observed traffic as a PCAPNG file; returns frame count. */
-  exportTrace(
-    file: string,
-    userAppl = "strobe-packet-tracker m4a loopback tap",
-  ): number {
+  exportTrace(file: string, userAppl = "strobe-packet-tracker m4a loopback tap"): number {
     const built = this.synthesizeAll();
     const buf = writePcapng(built.chunks, { linkType: 1, userAppl });
     fs.writeFileSync(file, buf);
@@ -635,11 +602,7 @@ function toBuf(v: Buffer | string | Uint8Array): Buffer {
  * send(msg, offset, length, port[, addr][, cb]). */
 function parseSendArgs(args: unknown[]): { dport: number; dstIp: string } | null {
   let portIdx: number | null = null;
-  if (
-    typeof args[1] === "number" &&
-    typeof args[2] === "number" &&
-    typeof args[3] === "number"
-  ) {
+  if (typeof args[1] === "number" && typeof args[2] === "number" && typeof args[3] === "number") {
     portIdx = 3; // msg, offset, length, port
   } else if (typeof args[1] === "number") {
     portIdx = 1; // msg, port

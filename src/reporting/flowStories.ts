@@ -39,9 +39,7 @@ export function printFlowStories(traceFile: string): number {
     console.log(line);
     if (f.tcp) {
       const t = f.tcp;
-      const hs = t.syn
-        ? `syn+t=${t.synAck ? t.synAck.deltaMs?.toFixed(1) : "?"}ms`
-        : "no-syn";
+      const hs = t.syn ? `syn+t=${t.synAck ? t.synAck.deltaMs?.toFixed(1) : "?"}ms` : "no-syn";
       const flags = t.flagsSeen.slice(0, 6).join(",");
       for (const dir of ["a2b", "b2a"] as const) {
         const s = t[dir];
@@ -59,9 +57,13 @@ export function printFlowStories(traceFile: string): number {
       }
       if (f.http) {
         for (const m of f.http.requests)
-          console.log(`      http req: ${m.method} ${m.uri} ${m.version} clen=${m.contentLength ?? "-"} complete=${m.bodyComplete}`);
+          console.log(
+            `      http req: ${m.method} ${m.uri} ${m.version} clen=${m.contentLength ?? "-"} complete=${m.bodyComplete}`,
+          );
         for (const m of f.http.responses)
-          console.log(`      http res: ${m.status} ${m.statusText} clen=${m.contentLength ?? "-"} bodyCaptured=${m.bodyCaptured} complete=${m.bodyComplete}`);
+          console.log(
+            `      http res: ${m.status} ${m.statusText} clen=${m.contentLength ?? "-"} bodyCaptured=${m.bodyCaptured} complete=${m.bodyComplete}`,
+          );
       }
     }
   }

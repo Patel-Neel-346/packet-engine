@@ -85,7 +85,7 @@ export function parseConvTables(stdout: string): TsharkConvTables {
   let current: keyof TsharkConvTables | null = null;
   const re = new RegExp(
     `^(\\S+)\\s+<->\\s+(\\S+)\\s+(\\d+)\\s+${VALUE}\\s+(\\d+)\\s+${VALUE}` +
-    `(?:\\s+(\\d+)\\s+${VALUE})?`,
+      `(?:\\s+(\\d+)\\s+${VALUE})?`,
   );
   // groups: 1 addrA, 2 addrB, 3 framesBtoA, 4 valBtoA, 5 unitBtoA,
   //         6 framesAtoB, 7 valAtoB, 8 unitAtoB, (9/10/11 total ignored)
@@ -95,7 +95,8 @@ export function parseConvTables(stdout: string): TsharkConvTables {
     else if (line.startsWith("UDP Conversations")) current = "udp";
     else if (line.startsWith("IPv6 Conversations")) current = "ipv6";
     else if (line.startsWith("IPv4 Conversations")) current = "ip";
-    else if (/Conversations$/.test(line) && !/^(TCP|UDP|IPv6|IPv4) Conversations$/i.test(line)) current = null;
+    else if (/Conversations$/.test(line) && !/^(TCP|UDP|IPv6|IPv4) Conversations$/i.test(line))
+      current = null;
     if (!current) continue;
     const m = re.exec(line);
     if (!m) continue;
@@ -122,11 +123,7 @@ export function parseConvTables(stdout: string): TsharkConvTables {
   return tables;
 }
 
-function bytesMatch(
-  theirs: number,
-  ours: number,
-  unit: "bytes" | "kB" | "MB" | "GB",
-): boolean {
+function bytesMatch(theirs: number, ours: number, unit: "bytes" | "kB" | "MB" | "GB"): boolean {
   if (unit === "bytes") return theirs === ours;
   // Verified display rule (s1/s2/s3/s12 rows): tshark floors the byte sum to
   // SI units — display = floor(raw / 1000) "kB", floor(raw / 1e6) "MB".
@@ -138,9 +135,7 @@ function bytesMatch(
 function runTshark(args: string[], cwd: string, okCodes?: number[]): Promise<string> {
   // runCommand spawns with our process cwd; file args are resolved against
   // the caller's cwd so relative paths behave as the user of the CLI expects.
-  const fixed = args.map((a) =>
-    /\.(pcapng|pcap)$/i.test(a) ? path.resolve(cwd, a) : a,
-  );
+  const fixed = args.map((a) => (/\.(pcapng|pcap)$/i.test(a) ? path.resolve(cwd, a) : a));
   return runCommand(tsharkExe(), fixed, {}).then((r) => {
     const code = r.code ?? 0;
     if (code !== 0 && !(okCodes ?? [0]).includes(code)) {
@@ -174,12 +169,17 @@ function visibleCountsByFlow(
     if (!f) return false;
     return (
       (f.ip4src !== null || f.ip6src !== null) &&
-      (f.tcpPorts.length > 0 || f.udpPorts.length > 0 ||
-        f.icmpType !== null || f.icmpv6Type !== null ||
+      (f.tcpPorts.length > 0 ||
+        f.udpPorts.length > 0 ||
+        f.icmpType !== null ||
+        f.icmpv6Type !== null ||
         (f.ipProto !== null && (f.ipProto === "1" || f.ipProto === "58")))
     );
   };
-  const counts = new Map<string, { a2b: number; b2a: number; a2bBytes: number; b2aBytes: number }>();
+  const counts = new Map<
+    string,
+    { a2b: number; b2a: number; a2bBytes: number; b2aBytes: number }
+  >();
   for (const fl of flows) counts.set(fl.id, { a2b: 0, b2a: 0, a2bBytes: 0, b2aBytes: 0 });
   for (let i = 0; i < decoded.length; i++) {
     const p = decoded[i];
@@ -189,7 +189,12 @@ function visibleCountsByFlow(
     const fragOther = ip.version === 4 && ip.fragment !== undefined && ip.fragment.offsetBytes > 0;
     let key: string | null = null;
     let isA2b = false;
-    if ((t.kind === "tcp" || t.kind === "udp") && t.sport !== undefined && t.dport !== undefined && !fragOther) {
+    if (
+      (t.kind === "tcp" || t.kind === "udp") &&
+      t.sport !== undefined &&
+      t.dport !== undefined &&
+      !fragOther
+    ) {
       const f = canonicalFlow(t.proto, ip.src, t.sport, ip.dst, t.dport);
       key = `p${t.proto} ${f.aip}:${f.aport} <--> ${f.bip}:${f.bport}`;
       isA2b = t.sport === f.aport && ip.src === f.aip;
@@ -217,12 +222,24 @@ interface DnsRec {
 }
 
 function tsharkDnsRecords(file: string, cwd: string): Promise<DnsRec[]> {
-  return runTshark([
-    "-r", file, "-n",
-    "-Y", "dns.flags.response == 1",
-    "-T", "fields",
-    "-e", "dns.qry.name", "-e", "dns.a", "-e", "dns.aaaa",
-  ], cwd).then((out) => {
+  return runTshark(
+    [
+      "-r",
+      file,
+      "-n",
+      "-Y",
+      "dns.flags.response == 1",
+      "-T",
+      "fields",
+      "-e",
+      "dns.qry.name",
+      "-e",
+      "dns.a",
+      "-e",
+      "dns.aaaa",
+    ],
+    cwd,
+  ).then((out) => {
     const recs: DnsRec[] = [];
     for (const line of out.split(/\r?\n/)) {
       if (!line.trim()) continue;
@@ -264,14 +281,28 @@ interface HttpRow {
 }
 
 function tsharkHttpRows(file: string, cwd: string): Promise<HttpRow[]> {
-  return runTshark([
-    "-r", file, "-n",
-    "-Y", "http",
-    "-T", "fields",
-    "-e", "tcp.srcport", "-e", "tcp.dstport",
-    "-e", "http.request.method", "-e", "http.request.uri",
-    "-e", "http.response.code",
-  ], cwd).then((out) => {
+  return runTshark(
+    [
+      "-r",
+      file,
+      "-n",
+      "-Y",
+      "http",
+      "-T",
+      "fields",
+      "-e",
+      "tcp.srcport",
+      "-e",
+      "tcp.dstport",
+      "-e",
+      "http.request.method",
+      "-e",
+      "http.request.uri",
+      "-e",
+      "http.response.code",
+    ],
+    cwd,
+  ).then((out) => {
     const rows: HttpRow[] = [];
     for (const line of out.split(/\r?\n/)) {
       if (!line.trim()) continue;
@@ -298,16 +329,13 @@ function rowForFlow(
   const targetB = `${flow.b.ip}:${flow.b.port}`;
   for (const r of rows) {
     if (r.addrA === target && r.addrB === targetB) return { row: r, origin: r, reason: "" };
-    if (r.addrA === targetB && r.addrB === target) return { row: flipRow(r), origin: r, reason: "" };
+    if (r.addrA === targetB && r.addrB === target)
+      return { row: flipRow(r), origin: r, reason: "" };
   }
   return { row: null, origin: null, reason: `no conv row with endpoints ${target} <-> ${targetB}` };
 }
 
-function rowForIpPair(
-  rows: ConvRow[],
-  aip: string,
-  bip: string,
-): ConvRow | null {
+function rowForIpPair(rows: ConvRow[], aip: string, bip: string): ConvRow | null {
   for (const r of rows) {
     if ((r.addrA === aip && r.addrB === bip) || (r.addrA === bip && r.addrB === aip)) return r;
   }
@@ -331,11 +359,25 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
   const { groups } = dedupePackets(parsed, decoded);
   const frames = await tsharkReadFrames(file);
 
-  const conv = parseConvTables(await runTshark([
-    "-r", file, "-n", "-q",
-    "-z", "conv,tcp", "-z", "conv,udp",
-    "-z", "conv,ip", "-z", "conv,ipv6",
-  ], cwd));
+  const conv = parseConvTables(
+    await runTshark(
+      [
+        "-r",
+        file,
+        "-n",
+        "-q",
+        "-z",
+        "conv,tcp",
+        "-z",
+        "conv,udp",
+        "-z",
+        "conv,ip",
+        "-z",
+        "conv,ipv6",
+      ],
+      cwd,
+    ),
+  );
 
   const counts = visibleCountsByFlow(parsed, decoded, frames, analysis.flows);
 
@@ -361,16 +403,44 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
   const dedupPcapPath = path.join(outDir, `${base}.deduped.pcap`);
   if (chunks.length > 0) {
     fs.writeFileSync(dedupPcapPath, writeClassicPcap(chunks, 1));
-    const rt = await runTshark(["-r", dedupPcapPath, "-n", "-Y", "tcp.analysis.retransmission", "-T", "fields", "-e", "frame.number"], cwd);
+    const rt = await runTshark(
+      [
+        "-r",
+        dedupPcapPath,
+        "-n",
+        "-Y",
+        "tcp.analysis.retransmission",
+        "-T",
+        "fields",
+        "-e",
+        "frame.number",
+      ],
+      cwd,
+    );
     for (const n of rt.split(/\r?\n/).filter(Boolean)) retransFrames.add(Number(n));
   }
-  const convDedup = chunks.length > 0
-    ? parseConvTables(await runTshark([
-        "-r", dedupPcapPath, "-n", "-q",
-        "-z", "conv,tcp", "-z", "conv,udp",
-        "-z", "conv,ip", "-z", "conv,ipv6",
-      ], cwd))
-    : null;
+  const convDedup =
+    chunks.length > 0
+      ? parseConvTables(
+          await runTshark(
+            [
+              "-r",
+              dedupPcapPath,
+              "-n",
+              "-q",
+              "-z",
+              "conv,tcp",
+              "-z",
+              "conv,udp",
+              "-z",
+              "conv,ip",
+              "-z",
+              "conv,ipv6",
+            ],
+            cwd,
+          ),
+        )
+      : null;
 
   // Key each EXPORTED member (kept[i]) by its group's flow. The exported
   // member is the group's first ethernet-framed copy, which need not be the
@@ -380,7 +450,12 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
     const ip = p.ip;
     if (!t || !ip || t.kind === "other") return null;
     const fragOther = ip.version === 4 && ip.fragment !== undefined && ip.fragment.offsetBytes > 0;
-    if ((t.kind === "tcp" || t.kind === "udp") && t.sport !== undefined && t.dport !== undefined && !fragOther) {
+    if (
+      (t.kind === "tcp" || t.kind === "udp") &&
+      t.sport !== undefined &&
+      t.dport !== undefined &&
+      !fragOther
+    ) {
       const f = canonicalFlow(t.proto, ip.src, t.sport, ip.dst, t.dport);
       return `p${t.proto} ${f.aip}:${f.aport} <--> ${f.bip}:${f.bport}`;
     }
@@ -401,8 +476,12 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
   // Unique-view per-direction counts over the EXPORTED members (exactly the
   // population inside the deduped pcap; tshark's deduped conv tables must
   // equal these). Same attribution rule as buildFlows.
-  const countsUnique = new Map<string, { a2b: number; b2a: number; a2bBytes: number; b2aBytes: number }>();
-  for (const fl of analysis.flows) countsUnique.set(fl.id, { a2b: 0, b2a: 0, a2bBytes: 0, b2aBytes: 0 });
+  const countsUnique = new Map<
+    string,
+    { a2b: number; b2a: number; a2bBytes: number; b2aBytes: number }
+  >();
+  for (const fl of analysis.flows)
+    countsUnique.set(fl.id, { a2b: 0, b2a: 0, a2bBytes: 0, b2aBytes: 0 });
   for (const idx of kept) {
     const p = decoded[idx];
     const t = p.transport;
@@ -411,7 +490,12 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
     const fragOther = ip.version === 4 && ip.fragment !== undefined && ip.fragment.offsetBytes > 0;
     let key: string | null = null;
     let isA2b = false;
-    if ((t.kind === "tcp" || t.kind === "udp") && t.sport !== undefined && t.dport !== undefined && !fragOther) {
+    if (
+      (t.kind === "tcp" || t.kind === "udp") &&
+      t.sport !== undefined &&
+      t.dport !== undefined &&
+      !fragOther
+    ) {
       const f = canonicalFlow(t.proto, ip.src, t.sport, ip.dst, t.dport);
       key = `p${t.proto} ${f.aip}:${f.aport} <--> ${f.bip}:${f.bport}`;
       isA2b = t.sport === f.aport && ip.src === f.aip;
@@ -428,8 +512,10 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
     slot[isA2b ? "a2bBytes" : "b2aBytes"] += parsed.packets[idx].origLen;
   }
 
-
-  for (const [proto, rows] of [["tcp", conv.tcp], ["udp", conv.udp]] as const) {
+  for (const [proto, rows] of [
+    ["tcp", conv.tcp],
+    ["udp", conv.udp],
+  ] as const) {
     const flows = analysis.flows.filter((f) => f.kind === proto);
     const used = new Set<ConvRow>();
     let passes = 0;
@@ -453,7 +539,8 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
       if (convDedup) {
         const drow = rowForFlow(rowsOf(convDedup, proto), fl).row;
         okB = drow
-          ? drow.framesAtoB === mineU.a2b && drow.framesBtoA === mineU.b2a &&
+          ? drow.framesAtoB === mineU.a2b &&
+            drow.framesBtoA === mineU.b2a &&
             bytesMatch(drow.bytesAtoB, mineU.a2bBytes, drow.unitAtoB) &&
             bytesMatch(drow.bytesBtoA, mineU.b2aBytes, drow.unitBtoA)
           : null;
@@ -462,9 +549,13 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
       else {
         mism.push(
           `${fl.id}: RAW tshark ${row.framesAtoB}/${row.framesBtoA} frames vs ours-visible ${mine.a2b}/${mine.b2a}` +
-            ` | DEDUP tshark-vs-ours ${convDedup ? (rowForFlow(rowsOf(convDedup, proto), fl).row
-              ? `${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).framesAtoB}/${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).framesBtoA} f (${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).bytesAtoB}B/${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).bytesBtoA}B ${((rowForFlow(rowsOf(convDedup, proto), fl).row) as ConvRow).unitAtoB})`
-              : "no-row") : "no-dedup-pcap"} vs ours-unique ${mineU.a2b}/${mineU.b2a} (${mineU.a2bBytes}B/${mineU.b2aBytes}B)` +
+            ` | DEDUP tshark-vs-ours ${
+              convDedup
+                ? rowForFlow(rowsOf(convDedup, proto), fl).row
+                  ? `${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).framesAtoB}/${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).framesBtoA} f (${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).bytesAtoB}B/${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).bytesBtoA}B ${(rowForFlow(rowsOf(convDedup, proto), fl).row as ConvRow).unitAtoB})`
+                  : "no-row"
+                : "no-dedup-pcap"
+            } vs ours-unique ${mineU.a2b}/${mineU.b2a} (${mineU.a2bBytes}B/${mineU.b2aBytes}B)` +
             ` (epb-view ${fl.packets.a2b}/${fl.packets.b2a})`,
         );
       }
@@ -479,7 +570,11 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
       details: [
         `our flows=${flows.length}, tshark rows=${rows.length}, exact-bytes rows=${rows.filter((r) => r.unitAtoB === "bytes" && r.unitBtoA === "bytes").length}`,
         ...extra.map((e) => `UNMATCHED: ${e}`),
-        ...(unmatched.length ? [`tshark rows with no matching our-flow: ${unmatched.map((r) => `${r.addrA} <-> ${r.addrB}`).join("; ")}`] : []),
+        ...(unmatched.length
+          ? [
+              `tshark rows with no matching our-flow: ${unmatched.map((r) => `${r.addrA} <-> ${r.addrB}`).join("; ")}`,
+            ]
+          : []),
       ],
       mismatches: mism,
     });
@@ -522,10 +617,15 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
       const fo = (r: ConvRow): string => `${r.framesAtoB}/${r.framesBtoA}`;
       const mineStr = `${mine.a2b}/${mine.b2a}`;
       const bytesOk =
-        (bytesMatch(row.bytesAtoB, mine.a2bBytes, row.unitAtoB) && bytesMatch(row.bytesBtoA, mine.b2aBytes, row.unitBtoA)) ||
-        (bytesMatch(row.bytesAtoB, mine.b2aBytes, row.unitBtoA) && bytesMatch(row.bytesBtoA, mine.a2bBytes, row.unitAtoB));
+        (bytesMatch(row.bytesAtoB, mine.a2bBytes, row.unitAtoB) &&
+          bytesMatch(row.bytesBtoA, mine.b2aBytes, row.unitBtoA)) ||
+        (bytesMatch(row.bytesAtoB, mine.b2aBytes, row.unitBtoA) &&
+          bytesMatch(row.bytesBtoA, mine.a2bBytes, row.unitAtoB));
       if ((fo(row) === mineStr || fo(flipRow(row)) === mineStr) && bytesOk) passes++;
-      else mism.push(`${pk}: tshark ${fo(row)} (${row.bytesAtoB}B/${row.bytesBtoA}B) vs ours ${mineStr} (${mine.a2bBytes}B/${mine.b2aBytes}B)`);
+      else
+        mism.push(
+          `${pk}: tshark ${fo(row)} (${row.bytesAtoB}B/${row.bytesBtoA}B) vs ours ${mineStr} (${mine.a2bBytes}B/${mine.b2aBytes}B)`,
+        );
     }
     checks.push({
       check: "conv-icmp-pairs",
@@ -573,8 +673,14 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
       for (const m of f.http?.requests ?? []) reqMine.push(`${m.method} ${m.uri}`);
       for (const m of f.http?.responses ?? []) resMine.push(String(m.status));
     }
-    const reqTheirs = recs.filter((r) => r.method).map((r) => `${r.method} ${r.uri}`).sort();
-    const resTheirs = recs.filter((r) => r.code).map((r) => r.code).sort();
+    const reqTheirs = recs
+      .filter((r) => r.method)
+      .map((r) => `${r.method} ${r.uri}`)
+      .sort();
+    const resTheirs = recs
+      .filter((r) => r.code)
+      .map((r) => r.code)
+      .sort();
     const reqOk = JSON.stringify(reqMine.slice().sort()) === JSON.stringify(reqTheirs);
     const resOk = JSON.stringify(resMine.slice().sort()) === JSON.stringify(resTheirs);
     checks.push({
@@ -586,8 +692,16 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
         `requests: ours=${reqMine.length} tshark=${reqTheirs.length}; responses: ours=${resMine.length} tshark=${resTheirs.length}`,
       ],
       mismatches: [
-        ...(reqOk ? [] : [`requests: tshark=[${reqTheirs.join("; ")}] ours=[${reqMine.slice().sort().join("; ")}]`]),
-        ...(resOk ? [] : [`responses: tshark=[${resTheirs.join(", ")}] ours=[${resMine.slice().sort().join(", ")}]`]),
+        ...(reqOk
+          ? []
+          : [
+              `requests: tshark=[${reqTheirs.join("; ")}] ours=[${reqMine.slice().sort().join("; ")}]`,
+            ]),
+        ...(resOk
+          ? []
+          : [
+              `responses: tshark=[${resTheirs.join(", ")}] ours=[${resMine.slice().sort().join(", ")}]`,
+            ]),
       ],
     });
   }
@@ -610,7 +724,8 @@ export async function verifyTrace(file: string, cwd: string = process.cwd()): Pr
         const ts = perFlow.get(f.id) ?? 0;
         retransTable.push({ flow: f.id, ours: f.uniqueRetransSegs, tshark: ts });
         if (ts === f.uniqueRetransSegs) passes++;
-        else if (f.uniqueRetransSegs === 0 && ts > f.uniqueRetransSegs) passes++; // tshark superset; ok
+        else if (f.uniqueRetransSegs === 0 && ts > f.uniqueRetransSegs)
+          passes++; // tshark superset; ok
         else mism.push(`${f.id}: ours=${f.uniqueRetransSegs} tshark=${ts}`);
       }
       checks.push({

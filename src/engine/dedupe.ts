@@ -73,9 +73,8 @@ export function dedupePackets(
     const cand = recentByHash.get(h);
     if (
       cand &&
-      Math.abs(
-        packetTimestampSeconds(parsed.packets[cand.reprIdx], parsed.interfaces) - t,
-      ) * 1e6 <= toleranceUs
+      Math.abs(packetTimestampSeconds(parsed.packets[cand.reprIdx], parsed.interfaces) - t) * 1e6 <=
+        toleranceUs
     ) {
       cand.members.push(i);
       recentByHash.set(h, cand); // latest occurrence wins for future diffs

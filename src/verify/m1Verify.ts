@@ -181,9 +181,7 @@ export async function m1Verify(): Promise<number> {
   const mismatchSamples: string[] = [];
   const n = Math.min(frames.length, parsed.packets.length);
   if (frames.length !== parsed.packets.length) {
-    console.log(
-      `COUNT MISMATCH: our EPBs=${parsed.packets.length} tshark frames=${frames.length}`,
-    );
+    console.log(`COUNT MISMATCH: our EPBs=${parsed.packets.length} tshark frames=${frames.length}`);
     mismatches++;
   }
   for (let i = 0; i < n; i++) {
@@ -241,13 +239,7 @@ export async function m1Verify(): Promise<number> {
     if (proto !== "other" && f.src && f.dst) {
       const sport = Number(ports[0] ?? 0);
       const dport = Number(ports[ports.length - 1] ?? 0);
-      const flow = canonicalFlow(
-        proto,
-        f.src,
-        sport,
-        f.dst,
-        dport,
-      );
+      const flow = canonicalFlow(proto, f.src, sport, f.dst, dport);
       flows.set(flowId(flow), flow);
     }
   }
@@ -284,8 +276,7 @@ export async function m1Verify(): Promise<number> {
     `Duplicates: byte-identical groups=${dupGroups} covering ${dupFrames} frames; same-timestamp groups=${tsDupGroups} covering ${tsDupFrames} frames (cross-component re-observations)`,
   );
 
-  const pass =
-    mismatches === 0 && frames.length === parsed.packets.length;
+  const pass = mismatches === 0 && frames.length === parsed.packets.length;
 
   console.log(`\n[VERIFY] ${pass ? "PASS" : "FAIL"} (mismatches=${mismatches})`);
   fs.writeFileSync(

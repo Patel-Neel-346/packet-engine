@@ -35,7 +35,11 @@ function tlsFrame(opts: {
     Buffer.from([0x00, 0x02]), // cipher-suites list length = 2 (one suite)
     Buffer.from([0x00, 0x2f]), // TLS_RSA_WITH_AES_128_CBC_SHA (filler, not asserted)
     Buffer.from([0x00]), // compression methods: one null compression
-    (() => { const e = Buffer.alloc(2); e.writeUInt16BE(opts.extLenOverride ?? extBody.length); return e; })(),
+    (() => {
+      const e = Buffer.alloc(2);
+      e.writeUInt16BE(opts.extLenOverride ?? extBody.length);
+      return e;
+    })(),
     extBody,
   ]);
   const hi = Buffer.alloc(4);
@@ -73,7 +77,10 @@ const sniExt = (host: string): Buffer => {
 
 const supportedVersionsExt = (): Buffer =>
   // listLen(1) + 2-byte version entries (RFC 8446 §4.2.1)
-  ext(0x002b, Buffer.concat([Buffer.from([0x04]), Buffer.from("0304", "hex"), Buffer.from("0303", "hex")]));
+  ext(
+    0x002b,
+    Buffer.concat([Buffer.from([0x04]), Buffer.from("0304", "hex"), Buffer.from("0303", "hex")]),
+  );
 
 const echExt = (type = 0xfe0d): Buffer => ext(type, Buffer.from([1, 2, 3, 4]));
 
@@ -139,7 +146,10 @@ describe("tls catalog (G)", () => {
 
   it("tls G9: random encrypted-looking payload on port 443 -> no tls block, NO errors, no throw (s9 QUIC silence rule)", () => {
     const garbage = Buffer.from("cae66bec1b3f29b0a4d7", "hex");
-    const r = decode(1, eth(ip4(tcp({ sport: 30000, dport: 443 }, garbage), { proto: 6 }), { ethertype: 0x0800 }));
+    const r = decode(
+      1,
+      eth(ip4(tcp({ sport: 30000, dport: 443 }, garbage), { proto: 6 }), { ethertype: 0x0800 }),
+    );
     expect(r.errors).toHaveLength(0);
     expect(r.transport?.sport).toBe(30000);
   });
@@ -156,17 +166,22 @@ describe("tls catalog (G)", () => {
       const text = readFileSync(join(dir, f), "utf8");
       // code-only view: strip comment lines so documented verification history
       // (e.g. "verified against tshark") cannot shadow a real invocation
-      const code = text.split("\n").filter((line) => {
-        const t = line.trim();
-        return t !== "" && !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
-      }).join("\n");
+      const code = text
+        .split("\n")
+        .filter((line) => {
+          const t = line.trim();
+          return t !== "" && !t.startsWith("//") && !t.startsWith("*") && !t.startsWith("/*");
+        })
+        .join("\n");
       expect(/\bchild_process\b/.test(code)).toBe(false); // ${f}: no child_process
       expect(/tshark/i.test(code)).toBe(false); // ${f}: no tshark invocation
       expect(/\brequire\s*\(/.test(code)).toBe(false); // ${f}: no require (pure ESM)
       // node:crypto is allowed ONLY in dedupe.ts (sha1 for the M2 duplicate
       // rule); no encryption/decryption anywhere in the engine.
       if (f === "dedupe.ts") {
-        expect(/createCipheriv|createDecipheriv|createSecretKey|generateKey/.test(code)).toBe(false);
+        expect(/createCipheriv|createDecipheriv|createSecretKey|generateKey/.test(code)).toBe(
+          false,
+        );
       } else {
         expect(/\bnode:crypto\b/.test(code)).toBe(false); // ${f}: crypto import
       }

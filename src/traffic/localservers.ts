@@ -1,12 +1,19 @@
-// Local test servers run (non-elevated) by the traffic generators for the
-// plain-HTTP-split, WebSocket-upgrade, and loopback scenarios. Implemented
-// on raw net sockets so SEGMENT SPLITTING is under our control (Node's
-// http module does not split headers).
+// ============================================================================
+// Local Test Traffic Generators & Socket Fixtures
 //
-// Layer:     traffic — local server I/O (raw net sockets; non-elevated)
+// Non-elevated local test servers used for network edge-case verification:
+//   1. Split HTTP Server: sends response headers across physical TCP segment
+//      boundaries with delayed writes (~12ms apart).
+//   2. Split HTTP Request: sends HTTP request lines and headers across separate
+//      TCP writes to test reassembly in the packet engine.
+//   3. Minimal WebSocket Server & Client: implements RFC 6455 handshake
+//      and masked framing over raw TCP sockets.
+//   4. UDP Echo Server & Client: validates UDP roundtrip conversation tracking.
+//
+// Layer:     traffic — local server I/O (raw net/dgram sockets; non-elevated)
 // Milestone: M2 (split-HTTP s2_local_split, WebSocket s13_ws) / M4a (loopback echo s11)
-// Verified:  their traces captured + verified; app-level truth re-checked by the m4a tap gate
 // Exports:   startSplitHttpServer, splitHttpRequest, startWsEchoServer, wsClientUpgrade, udpEchoRound
+// ============================================================================
 
 import net from "node:net";
 import crypto from "node:crypto";
@@ -18,152 +25,262 @@ export interface LocalHttpResult {
 }
 
 /**
- * Raw HTTP/1.1 server: sends every response as two TCP writes ~12ms apart
- * so the response header is physically split across segments. Serves:
- *   /          -> 200 with a small body
- *   /big/<n>   -> 200 with n bytes body (written in 1 write)
+ * Starts a raw HTTP/1.1 server that intentionally splits headers across multiple
+ * TCP segment writes ~12ms apart. This forces real-world TCP packet segmentation
+ * for decoder stream reassembly testing.
+ *
+ * Supported paths:
+ *   - `/`       -> 200 OK with small body
+ *   - `/big/<n>` -> 200 OK with <n> bytes of body payload
  */
 export function startSplitHttpServer(host: string, port: number): Promise<LocalHttpResult> {
   return new Promise((resolve, reject) => {
     const server = net.createServer((socket) => {
       socket.setNoDelay(true);
       let req = Buffer.alloc(0);
-      socket.on("data", async (c: Buffer) => {
-        req = Buffer.concat([req, c]);
-        if (req.length > 65536) socket.destroy();
-        const end = req.indexOf("\r\n\r\n");
-        if (end === -1) return;
-        const head = req.subarray(0, end).toString("utf8");
-        const m = /^GET ([^ ]+) HTTP\/1\.[01]/.exec(head);
-        const path2 = m ? m[1] : "/";
-        const closeAfter = () => {
-          socket.end();
-        };
-        if (path2.startsWith("/big/")) {
-          const n = Math.min(16_000_000, Math.max(1, Number(path2.slice(5)) || 0));
-          const body = Buffer.alloc(n, 0x61);
-          const h1 = "HTTP/1.1 200 OK\r\nContent-Length: " + n + "\r\n";
-          const h2 = "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n";
-          socket.write(h1);
-          setTimeout(() => { socket.write(h2); setTimeout(() => socket.write(body), 8); }, 8);
-          socket.on("close", () => { /* body write best-effort */ });
+
+      socket.on("data", async (chunk: Buffer) => {
+        req = Buffer.concat([req, chunk]);
+        if (req.length > 65536) {
+          socket.destroy();
           return;
         }
-        const body = "plain-http-split-ok " + crypto.randomBytes(8).toString("hex");
-        const h1 = "HTTP/1.1 200 OK\r\n";
-        const h2 = "X-Test-Server: split\r\nContent-Type: text/plain\r\nConnection: close\r\nContent-Length: " + body.length + "\r\n\r\n" + body;
-        socket.write(h1);
-        // Split: rest of the headers + body arrive >=12ms later.
-        setTimeout(() => { socket.write(h2); closeAfter(); }, 12);
+
+        const endOfHead = req.indexOf("\r\n\r\n");
+        if (endOfHead === -1) return;
+
+        const head = req.subarray(0, endOfHead).toString("utf8");
+        const match = /^GET ([^ ]+) HTTP\/1\.[01]/.exec(head);
+        const reqPath = match ? match[1] : "/";
+
+        if (reqPath.startsWith("/big/")) {
+          const bodySize = Math.min(16_000_000, Math.max(1, Number(reqPath.slice(5)) || 0));
+          const body = Buffer.alloc(bodySize, 0x61);
+          const headerPart1 = `HTTP/1.1 200 OK\r\nContent-Length: ${bodySize}\r\n`;
+          const headerPart2 = "Content-Type: application/octet-stream\r\nConnection: close\r\n\r\n";
+
+          // Write header part 1 immediately
+          socket.write(headerPart1);
+
+          // Write header part 2 and body after small intentional delays to split TCP segments
+          setTimeout(() => {
+            socket.write(headerPart2);
+            setTimeout(() => {
+              socket.write(body);
+            }, 8);
+          }, 8);
+
+          return;
+        }
+
+        // Standard small body path
+        const body = `plain-http-split-ok ${crypto.randomBytes(8).toString("hex")}`;
+        const headerPart1 = "HTTP/1.1 200 OK\r\n";
+        const headerPart2 =
+          `X-Test-Server: split\r\nContent-Type: text/plain\r\nConnection: close\r\n` +
+          `Content-Length: ${body.length}\r\n\r\n${body}`;
+
+        socket.write(headerPart1);
+        setTimeout(() => {
+          socket.write(headerPart2);
+          socket.end();
+        }, 12);
       });
-      socket.on("error", () => { /* connection-level noise: ignored */ });
+
+      socket.on("error", () => {
+        // Suppress expected client teardown errors
+      });
     });
-    const fail = (e: Error) => reject(new Error(`split-http: ${e.message}`));
-    server.once("error", fail);
+
+    server.once("error", (err: Error) => reject(new Error(`split-http: ${err.message}`)));
     server.listen(port, host, () => {
       resolve({ port, server });
     });
   });
 }
 
-/** Simple HTTP request splitting its request headers across two writes. */
+/**
+ * Issues an HTTP GET request that splits request headers across two separate TCP writes.
+ */
 export function splitHttpRequest(
   host: string,
   port: number,
-  path2: string,
+  reqPath: string,
 ): Promise<{ status: string | null; bytes: number }> {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
     socket.setNoDelay(true);
-    let buf = Buffer.alloc(0);
-    let sent = false;
+
+    let received = Buffer.alloc(0);
+    let secondWriteSent = false;
+
+    const finish = () => {
+      const statusMatch = /^HTTP\/1\.[01] (\d{3})/.exec(received.toString("utf8"));
+      resolve({
+        status: statusMatch ? statusMatch[1] : null,
+        bytes: received.length,
+      });
+    };
+
     socket.on("connect", () => {
-      const first = `GET ${path2} HTTP/1.1\r\nHost: ${host}:${port}\r\n`;
-      socket.write(first);
+      // Send first half of the request
+      const firstSegment = `GET ${reqPath} HTTP/1.1\r\nHost: ${host}:${port}\r\n`;
+      socket.write(firstSegment);
+
+      // Send second half after 12ms to test TCP segment reassembly
       setTimeout(() => {
-        if (!sent) {
-          sent = true;
-          socket.write(`User-Agent: m2-split-client\r\nConnection: close\r\n\r\n`);
+        if (!secondWriteSent) {
+          secondWriteSent = true;
+          socket.write("User-Agent: m2-split-client\r\nConnection: close\r\n\r\n");
         }
       }, 12);
     });
-    socket.on("data", (c: Buffer) => {
-      buf = Buffer.concat([buf, c]);
+
+    socket.on("data", (chunk: Buffer) => {
+      received = Buffer.concat([received, chunk]);
     });
-    const finish = () => {
-      const s = /^HTTP\/1\.[01] (\d{3})/.exec(buf.toString("utf8"))?.[1] ?? null;
-      resolve({ status: s, bytes: buf.length });
-    };
+
     socket.on("close", finish);
     socket.on("error", () => finish());
-    setTimeout(() => { try { socket.destroy(); finish(); } catch { /* noop */ } }, 8000);
+
+    // 8-second safety timeout
+    setTimeout(() => {
+      try {
+        socket.destroy();
+        finish();
+      } catch {
+        // noop
+      }
+    }, 8000);
   });
 }
 
-/** Minimal WebSocket server: completes the RFC 6455 upgrade, sends one
- * text frame, echoes one client frame, then closes. */
-export function startWsEchoServer(host: string, port: number): Promise<{ port: number; server: net.Server }> {
-  const GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+/**
+ * Minimal RFC 6455 WebSocket echo server over raw TCP.
+ * Accepts handshake upgrade, sends server greeting frame, echoes client frame, and terminates.
+ */
+export function startWsEchoServer(
+  host: string,
+  port: number,
+): Promise<{ port: number; server: net.Server }> {
+  const WS_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+
   return new Promise((resolve, reject) => {
     const server = net.createServer((socket) => {
       socket.setNoDelay(true);
       let req = Buffer.alloc(0);
-      socket.on("data", (c: Buffer) => {
-        req = Buffer.concat([req, c]);
-        const end = req.indexOf("\r\n\r\n");
-        if (end === -1) return;
-        if (req.subarray(0, 3).toString("ascii") !== "GET") return;
-        const m = /sec-websocket-key: ([^\r\n]+)/i.exec(req.subarray(0, end).toString("ascii"));
-        if (!m) { socket.destroy(); return; }
-        const accept = crypto.createHash("sha1").update(m[1].trim() + GUID).digest("base64");
+
+      socket.on("data", (chunk: Buffer) => {
+        req = Buffer.concat([req, chunk]);
+        const endOfHead = req.indexOf("\r\n\r\n");
+        if (endOfHead === -1) return;
+
+        const headerStr = req.subarray(0, endOfHead).toString("ascii");
+        if (!headerStr.startsWith("GET")) return;
+
+        const keyMatch = /sec-websocket-key: ([^\r\n]+)/i.exec(headerStr);
+        if (!keyMatch) {
+          socket.destroy();
+          return;
+        }
+
+        const secWebSocketAccept = crypto
+          .createHash("sha1")
+          .update(keyMatch[1].trim() + WS_GUID)
+          .digest("base64");
+
+        // Send 101 Switching Protocols response
         socket.write(
           "HTTP/1.1 101 Switching Protocols\r\n" +
-          "Upgrade: websocket\r\nConnection: Upgrade\r\n" +
-          `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
+            "Upgrade: websocket\r\n" +
+            "Connection: Upgrade\r\n" +
+            `Sec-WebSocket-Accept: ${secWebSocketAccept}\r\n\r\n`,
         );
-        // server hello text frame: FIN+text, len 5, "hello"
+
+        // Server hello text frame: FIN(0x80)|TEXT(0x01), length 5, payload "hello"
         socket.write(Buffer.from([0x81, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f]));
         socket.end();
       });
-      socket.on("error", () => { /* noop */ });
+
+      socket.on("error", () => {
+        // Ignore connection teardown errors
+      });
     });
-    const fail = (e: Error) => reject(new Error(`ws-echo: ${e.message}`));
-    server.once("error", fail);
+
+    server.once("error", (err: Error) => reject(new Error(`ws-echo: ${err.message}`)));
     server.listen(port, host, () => resolve({ port, server }));
   });
 }
 
-/** Minimal WebSocket client: sends the upgrade request + one masked frame. */
-export function wsClientUpgrade(host: string, port: number, path2: string): Promise<{ got101: boolean; gotFrame: boolean }> {
+/**
+ * Minimal RFC 6455 WebSocket client issuing the upgrade handshake and masked frame.
+ */
+export function wsClientUpgrade(
+  host: string,
+  port: number,
+  reqPath: string,
+): Promise<{ got101: boolean; gotFrame: boolean }> {
   return new Promise((resolve) => {
     const socket = net.createConnection({ host, port });
-    let buf = Buffer.alloc(0);
+    let received = Buffer.alloc(0);
     let got101 = false;
     let gotFrame = false;
+
     const finish = () => {
-      try { socket.destroy(); } catch { /* noop */ }
+      try {
+        socket.destroy();
+      } catch {
+        // noop
+      }
       resolve({ got101, gotFrame });
     };
+
     const timer = setTimeout(() => finish(), 8000);
+
     socket.on("connect", () => {
-      const key = crypto.randomBytes(16).toString("base64");
+      const clientKey = crypto.randomBytes(16).toString("base64");
       socket.write(
-        `GET ${path2} HTTP/1.1\r\nHost: ${host}:${port}\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: ${key}\r\nSec-WebSocket-Version: 13\r\n\r\n`,
+        `GET ${reqPath} HTTP/1.1\r\n` +
+          `Host: ${host}:${port}\r\n` +
+          "Upgrade: websocket\r\n" +
+          "Connection: Upgrade\r\n" +
+          `Sec-WebSocket-Key: ${clientKey}\r\n` +
+          "Sec-WebSocket-Version: 13\r\n\r\n",
       );
-      socket.write(Buffer.from([0x81, 0x81, 0xaa, 0xbb, 0xcc, 0xdd, 0xc2])); // masked "b"
+
+      // Masked WebSocket text frame payload: masked "b"
+      socket.write(Buffer.from([0x81, 0x81, 0xaa, 0xbb, 0xcc, 0xdd, 0xc2]));
     });
-    socket.on("data", (c: Buffer) => {
-      buf = Buffer.concat([buf, c]);
-      if (!got101 && buf.subarray(0, 12).toString("ascii").startsWith("HTTP/1.1 101")) got101 = true;
-      if (buf.length > 30) gotFrame = true;
-      if (got101 && gotFrame) { clearTimeout(timer); setTimeout(finish, 60); }
+
+    socket.on("data", (chunk: Buffer) => {
+      received = Buffer.concat([received, chunk]);
+      if (!got101 && received.subarray(0, 12).toString("ascii").startsWith("HTTP/1.1 101")) {
+        got101 = true;
+      }
+      if (received.length > 30) {
+        gotFrame = true;
+      }
+      if (got101 && gotFrame) {
+        clearTimeout(timer);
+        setTimeout(finish, 60);
+      }
     });
-    socket.on("error", () => { clearTimeout(timer); finish(); });
-    socket.on("close", () => { clearTimeout(timer); finish(); });
+
+    socket.on("error", () => {
+      clearTimeout(timer);
+      finish();
+    });
+
+    socket.on("close", () => {
+      clearTimeout(timer);
+      finish();
+    });
   });
 }
 
-/** UDP echo server + client pair for the loopback scenario. */
+/**
+ * UDP echo server and client roundtrip for loopback scenario verification.
+ */
 export function udpEchoRound(
   host: string,
   port: number,
@@ -174,24 +291,55 @@ export function udpEchoRound(
     const server = dgram.createSocket("udp4");
     let echoed = false;
     let clientStopped = false;
+
     const cleanup = () => {
       if (clientStopped) return;
       clientStopped = true;
-      try { server.close(); } catch { /* noop */ }
+      try {
+        server.close();
+      } catch {
+        // noop
+      }
       resolve({ echoed });
     };
+
     server.on("message", (msg, rinfo) => {
       server.send(msg, rinfo.port, rinfo.address);
-      if (msg.equals(payload)) echoed = true;
+      if (msg.equals(payload)) {
+        echoed = true;
+      }
       setTimeout(cleanup, 200);
     });
-    server.on("error", () => { /* noop */ });
+
+    server.on("error", () => {
+      // noop
+    });
+
     server.on("listening", () => {
       const client = dgram.createSocket("udp4");
-      const t = setTimeout(() => { try { client.close(); } catch { /* noop */ } cleanup(); }, timeoutMs);
-      client.on("message", () => { clearTimeout(t); try { client.close(); } catch { /* noop */ } });
-      client.send(payload, port, host, () => { /* noop */ });
+      const timer = setTimeout(() => {
+        try {
+          client.close();
+        } catch {
+          // noop
+        }
+        cleanup();
+      }, timeoutMs);
+
+      client.on("message", () => {
+        clearTimeout(timer);
+        try {
+          client.close();
+        } catch {
+          // noop
+        }
+      });
+
+      client.send(payload, port, host, () => {
+        // noop
+      });
     });
+
     server.bind(port, host);
   });
 }

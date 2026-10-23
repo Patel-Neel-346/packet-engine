@@ -119,16 +119,24 @@ async function main(): Promise<number> {
       console.log("  m2-plan     generate the M2 bundle script without running it (no UAC)");
       console.log("  m3-flows    print per-flow stories for a PCAPNG trace");
       console.log("              usage: node src/cli.ts m3-flows <trace.pcapng>");
-      console.log("  m3-verify   run the M3.3 full-matrix vs tshark → test-results/milestone3-checks.md");
-      console.log("  m4-report   analyze a directory of traces -> HTML dashboard + per-trace reports");
+      console.log(
+        "  m3-verify   run the M3.3 full-matrix vs tshark → test-results/milestone3-checks.md",
+      );
+      console.log(
+        "  m4-report   analyze a directory of traces -> HTML dashboard + per-trace reports",
+      );
       console.log("              usage: node src/cli.ts m4-report <dir> [reportDir]");
       console.log("  m4-watch    live-watch a directory, regenerate the dashboard on change");
-      console.log("              usage: node src/cli.ts m4-watch <dir> [reportDir] [--once] [--open]");
+      console.log(
+        "              usage: node src/cli.ts m4-watch <dir> [reportDir] [--once] [--open]",
+      );
       console.log("  m4-export   export a trace's flow analysis as json/csv/md");
       console.log("              usage: node src/cli.ts m4-export <trace.pcapng> [json|csv|md]");
       console.log("  m4-loopback M4-a userspace loopback tap: capture local scenarios + verify");
       console.log("              usage: node src/cli.ts m4-loopback [--tshark] [--dir <out>]");
-      console.log("  test-all    run EVERY verification gate (tsc, tests, m1+, parity, m3 matrix, m4, m4a)");
+      console.log(
+        "  test-all    run EVERY verification gate (tsc, tests, m1+, parity, m3 matrix, m4, m4a)",
+      );
       console.log("");
       return 2;
   }

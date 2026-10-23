@@ -26,7 +26,7 @@ IPv6 extension headers), **TCP** (ports, seq/ack, 8 flags, payload offsets),
 (`src/engine/flows.ts`): **DNS over UDP and TCP** (A/AAAA/CNAME → hostname
 attribution), **TLS ClientHello SNI** (metadata only, no decryption),
 **HTTP/1.x** (method/URI/status/Content-Length; chunked detected, not
-de-chunked), **WebSocket upgrade handshake**. QUIC/HTTP-3 is *identified* by
+de-chunked), **WebSocket upgrade handshake**. QUIC/HTTP-3 is _identified_ by
 UDP/443 correlation but **not decoded**. Other IP protocols fall into a
 `kind: "other"` bucket with the proto number recorded.
 
@@ -34,16 +34,17 @@ UDP/443 correlation but **not decoded**. Other IP protocols fall into a
 
 Do not rebuild these — understand them, then extend them:
 
-| Layer | Where | What it is |
-|---|---|---|
-| Unit/integration tests | `test/*.test.ts` (3 suites, 36 tests) | Inline synthetic byte fixtures — every fixture layout is written in the test file itself. Run `npm test`. |
-| tshark oracle: M1 | `src/verify/m1Verify.ts` (`npm run m1:verify`) | Frame-by-frame vs tshark on `out/m1.pcapng` (96 frames, 0 mismatches). |
+| Layer                    | Where                                                               | What it is                                                                                                    |
+| ------------------------ | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Unit/integration tests   | `test/*.test.ts` (3 suites, 36 tests)                               | Inline synthetic byte fixtures — every fixture layout is written in the test file itself. Run `npm test`.     |
+| tshark oracle: M1        | `src/verify/m1Verify.ts` (`npm run m1:verify`)                      | Frame-by-frame vs tshark on `out/m1.pcapng` (96 frames, 0 mismatches).                                        |
 | tshark oracle: M2 parity | `src/verify/parity.ts` (`src/verify/m3Matrix.ts` drives the corpus) | 21-column per-packet parity metric; 14 captured traces in `out/scen/` (13×100%, s10 low by design = risk R4). |
-| tshark oracle: M3 matrix | `src/verify/m3Verify.ts` | conv/DNS/HTTP/retransmission checks per trace vs tshark. 14/14 full pass. |
-| Gate suite | `src/testAll.ts` (`npm run test:all`) | All 8 gates in sequence (~45 s, offline, no UAC). **Run this after ANY change.** |
+| tshark oracle: M3 matrix | `src/verify/m3Verify.ts`                                            | conv/DNS/HTTP/retransmission checks per trace vs tshark. 14/14 full pass.                                     |
+| Gate suite               | `src/testAll.ts` (`npm run test:all`)                               | All 8 gates in sequence (~45 s, offline, no UAC). **Run this after ANY change.**                              |
 
 **tshark rules already established** (do not rediscover these):
-- Packets the engine cannot decode count as *unsupported*, never as matches.
+
+- Packets the engine cannot decode count as _unsupported_, never as matches.
 - tshark `-z conv` byte columns are SI floor-scaled (`floor(bytes/1000)`), so
   byte comparisons are inverted-window exact.
 - Report src is in `docs/history/` + `docs/project-status.md` (living ledger
@@ -68,7 +69,7 @@ Do not rebuild these — understand them, then extend them:
 
 - Present tests import `describe/it/expect` from **vitest** (devDependency) and
   run via `node --test test/decoder.test.ts test/flows.test.ts
-  test/loopbacktap.test.ts` (`npm test`). It works today — 36/36 pass.
+test/loopbacktap.test.ts` (`npm test`). It works today — 36/36 pass.
 - **A separate agent is introducing Jest for the whole build.** If you take
   over mid-migration, check `package.json` first: whichever framework is
   wired into the `test` script is the source of truth. Keep the 36 existing
@@ -94,9 +95,9 @@ scenario, and report field). Suggested shape:
 
 ## 7. Where to go deeper
 
-| Doc | For |
-|---|---|
-| `docs/ARCHITECTURE.md` | layout, layering rules, data flow, design decisions |
-| `docs/DEVELOPMENT.md` | setup, run-test:all-after-any-change rule, "how to add a scenario / decoder protocol / report field / gate" |
-| `docs/project-status.md` | current ledger, risks (read §7 R4 before touching s10 parity), honest unknowns |
-| `docs/history/` | verbatim dated milestone reports (evidence trail) |
+| Doc                      | For                                                                                                         |
+| ------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| `docs/ARCHITECTURE.md`   | layout, layering rules, data flow, design decisions                                                         |
+| `docs/DEVELOPMENT.md`    | setup, run-test:all-after-any-change rule, "how to add a scenario / decoder protocol / report field / gate" |
+| `docs/project-status.md` | current ledger, risks (read §7 R4 before touching s10 parity), honest unknowns                              |
+| `docs/history/`          | verbatim dated milestone reports (evidence trail)                                                           |

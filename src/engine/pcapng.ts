@@ -109,10 +109,7 @@ export function tickValue(tsHigh: number, tsLow: number): bigint {
 }
 
 /** Timestamp in epoch seconds (float) per interface resolution. */
-export function packetTimestampSeconds(
-  pkt: PcapngPacket,
-  ifaces: PcapngInterface[],
-): number {
+export function packetTimestampSeconds(pkt: PcapngPacket, ifaces: PcapngInterface[]): number {
   const iface = ifaces[pkt.interfaceId];
   const resol = iface ? iface.tsResolRaw : 6;
   const div = timestampDivisor(resol);
@@ -176,9 +173,7 @@ export function parsePcapng(buf: Buffer): PcapngFile {
       else {
         out.parseErrors.push({
           offset: off + 8,
-          message: `bad SHB byte-order magic 0x${magicBE
-            .toString(16)
-            .padStart(8, "0")}`,
+          message: `bad SHB byte-order magic 0x${magicBE.toString(16).padStart(8, "0")}`,
         });
         break;
       }

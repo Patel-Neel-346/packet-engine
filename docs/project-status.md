@@ -20,12 +20,12 @@ oracle — milestone by milestone, never claiming anything we haven't run.
 
 ## 1. Where we are — milestone ledger
 
-| Milestone | Scope | Status | Score |
-|---|---|---|---|
-| **M1** — capture path works | pktmon → ETL → etl2pcap → pure-TS PCAPNG parse + framing | ✅ **DONE**, reported (`docs/history/milestone-1-report.md`) | 100% |
-| **M2** — decode + parity vs tshark | PacketDecoder (16/16 tests) + parity engine, port-only filters, 15-scenario corpus | ✅ **DONE**, reported (`docs/history/milestone-2-report.md`) | core batch **9/9 scenarios 100% parity** (target ≥90%), extended batch honest findings |
-| **M3** — flow engine ("stories") | per-flow timelines, TCP stream reassembly, DNS attribution, HTTP extraction, verification vs tshark conv tables | 🟡 **~90% — engine done; verification matrix 14/14 traces FULL PASS; only CLI wiring + unit tests + the written report remain** | 14/14 checks pass (see §3) |
-| **M4+** — candidates chosen later | loopback vantage, richer stories, fragment reassembly | ⬜ not started | — |
+| Milestone                          | Scope                                                                                                           | Status                                                                                                                          | Score                                                                                  |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------- |
+| **M1** — capture path works        | pktmon → ETL → etl2pcap → pure-TS PCAPNG parse + framing                                                        | ✅ **DONE**, reported (`docs/history/milestone-1-report.md`)                                                                    | 100%                                                                                   |
+| **M2** — decode + parity vs tshark | PacketDecoder (16/16 tests) + parity engine, port-only filters, 15-scenario corpus                              | ✅ **DONE**, reported (`docs/history/milestone-2-report.md`)                                                                    | core batch **9/9 scenarios 100% parity** (target ≥90%), extended batch honest findings |
+| **M3** — flow engine ("stories")   | per-flow timelines, TCP stream reassembly, DNS attribution, HTTP extraction, verification vs tshark conv tables | 🟡 **~90% — engine done; verification matrix 14/14 traces FULL PASS; only CLI wiring + unit tests + the written report remain** | 14/14 checks pass (see §3)                                                             |
+| **M4+** — candidates chosen later  | loopback vantage, richer stories, fragment reassembly                                                           | ⬜ not started                                                                                                                  | —                                                                                      |
 
 **Bottom line: 2 of 3 planned milestones are complete and reported. The third
 (M3) is nearly done — the core engine work (M3.1, M3.2) is finished and
@@ -41,16 +41,16 @@ All from `strobe-packet-tracker\`. Nothing below needs elevation except the
 
 ### Offline analysis (no UAC, no network)
 
-| Command | What it does | Verified result |
-|---|---|---|
-| `npm test` | 16/16 decoder unit tests | 16 pass / 0 fail |
-| `npm run typecheck` | `tsc --noEmit` over whole engine | clean |
-| `node out\scen\reverify_parity.ts` | re-runs the M2 parity metric on the baseline + all 13 captured traces | 13×100% + s10 14.3% (by design, see §7) |
-| `node out\scen\m3_smoke.ts out\scen\s1_https_all.pcapng` | prints the flow stories for any trace: flows, hosts, SNI, handshake deltas, reassembled streams, HTTP conversations | works on all traces |
-| `node out\scen\m3_verify_one.ts <trace>` | full M3.3 verification of one trace vs tshark (conversation frames+bytes, deduped bytes, DNS map, HTTP stories, retransmissions) | s1 ✅, s2 ✅, s3 ✅, s8 ✅, s12 ✅ (12/12 conv + 12/12 retrans), matrix running for the rest |
-| `node out\scen\m3_verify_all.ts` | same verification across all 14 traces → `test-results/milestone3-checks.md` + `out/scen/m3_results.json` | ✅ **14/14 traces fully pass** |
-| `npm run m2:core` / `npm run m2:ext` | **re-run the live capture batches** (generates fresh traffic; 1 UAC each) | verified working (M2) |
-| `npm run m2:plan` / `npm run m1:pick` | planning helpers from the M2/M1 flows | verified working |
+| Command                                                  | What it does                                                                                                                     | Verified result                                                                              |
+| -------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `npm test`                                               | 16/16 decoder unit tests                                                                                                         | 16 pass / 0 fail                                                                             |
+| `npm run typecheck`                                      | `tsc --noEmit` over whole engine                                                                                                 | clean                                                                                        |
+| `node out\scen\reverify_parity.ts`                       | re-runs the M2 parity metric on the baseline + all 13 captured traces                                                            | 13×100% + s10 14.3% (by design, see §7)                                                      |
+| `node out\scen\m3_smoke.ts out\scen\s1_https_all.pcapng` | prints the flow stories for any trace: flows, hosts, SNI, handshake deltas, reassembled streams, HTTP conversations              | works on all traces                                                                          |
+| `node out\scen\m3_verify_one.ts <trace>`                 | full M3.3 verification of one trace vs tshark (conversation frames+bytes, deduped bytes, DNS map, HTTP stories, retransmissions) | s1 ✅, s2 ✅, s3 ✅, s8 ✅, s12 ✅ (12/12 conv + 12/12 retrans), matrix running for the rest |
+| `node out\scen\m3_verify_all.ts`                         | same verification across all 14 traces → `test-results/milestone3-checks.md` + `out/scen/m3_results.json`                        | ✅ **14/14 traces fully pass**                                                               |
+| `npm run m2:core` / `npm run m2:ext`                     | **re-run the live capture batches** (generates fresh traffic; 1 UAC each)                                                        | verified working (M2)                                                                        |
+| `npm run m2:plan` / `npm run m1:pick`                    | planning helpers from the M2/M1 flows                                                                                            | verified working                                                                             |
 
 ### What the engine demonstrates on real captured data today
 
@@ -94,7 +94,7 @@ dedupe, and per-flow retransmission counts matching tshark per stream
   `handshakeComplete`, FIN per direction, RST, flag-combination timeline.
 - DNS attribution: `ip → query names` from DNS responses in the trace.
 - HTTP/1.x (metadata): request line method/uri/version, response status/content-
-  length, chunked *detected but not de-chunked* (honest), 8-message/32 KiB caps.
+  length, chunked _detected but not de-chunked_ (honest), 8-message/32 KiB caps.
 - ICMP/ICMPv6 flows keyed port-less by IP pair (tshark conversation
   granularity); non-first IPv4 fragments counted separately (ports would be
   misread from payload bytes) and reconciled in M3.3.
@@ -181,16 +181,16 @@ checkpoint.
 
 ## 5. Risk & limitation register (every entry verified, none speculative)
 
-| # | Finding | Impact | Where recorded |
-|---|---|---|---|
-| R1 | pktmon sees zero loopback traffic on Windows build 26200 | local-only scenarios capture 0 packets (s2_local_split, s11_loopback, s13_ws all 0 EPBs) | M2 report Finding A |
-| R2 | Cloudflare/example.org IPs rotate frequently | IP-bound capture filters unreliable; port-only filters are the standing rule | M2 report fix #2 |
-| R3 | `speed.cloudflare.com` 100 MB download returns HTTP 403 | s14_burst is broken as a *traffic generator*; scenario still verified parity-wise for what flowed | M2 finding B |
-| R4 | `ipconfig /renew` gave "media disconnected" on this NIC | s10_arpdhcp has no DHCP DORA; ARP packets decode as "unsupported" by design (parity 14.3%, 12 non-IP packets) | M2 |
-| R5 | raw-802.11-style copies are L4-invisible to tshark; weird ethertype 0x4dba appears in some copies | our EPB-vs-tshark counts must subtract these copies (measured, not assumed, via the parity oracle) | M1/M2, now load-bearing in M3.3 |
-| R6 | tshark conv byte columns are SI floor-scaled; raw-trace conv bytes can disagree with its own per-stream frame.len aggregate | byte-sums verified on the deduped export; frame counts on the raw trace | M3.3 (this milestone) |
-| R7 | no `-z conv,icmp` in tshark 4.6.9 | ICMP flows verified through conv,ip/ipv6 pair rows on protocol-pure pairs | M3.3 |
-| R8 | TLS decryption out of scope | SNI/handshake metadata only by design (user-approved scope) | project rules |
+| #   | Finding                                                                                                                     | Impact                                                                                                        | Where recorded                  |
+| --- | --------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- | ------------------------------- |
+| R1  | pktmon sees zero loopback traffic on Windows build 26200                                                                    | local-only scenarios capture 0 packets (s2_local_split, s11_loopback, s13_ws all 0 EPBs)                      | M2 report Finding A             |
+| R2  | Cloudflare/example.org IPs rotate frequently                                                                                | IP-bound capture filters unreliable; port-only filters are the standing rule                                  | M2 report fix #2                |
+| R3  | `speed.cloudflare.com` 100 MB download returns HTTP 403                                                                     | s14_burst is broken as a _traffic generator_; scenario still verified parity-wise for what flowed             | M2 finding B                    |
+| R4  | `ipconfig /renew` gave "media disconnected" on this NIC                                                                     | s10_arpdhcp has no DHCP DORA; ARP packets decode as "unsupported" by design (parity 14.3%, 12 non-IP packets) | M2                              |
+| R5  | raw-802.11-style copies are L4-invisible to tshark; weird ethertype 0x4dba appears in some copies                           | our EPB-vs-tshark counts must subtract these copies (measured, not assumed, via the parity oracle)            | M1/M2, now load-bearing in M3.3 |
+| R6  | tshark conv byte columns are SI floor-scaled; raw-trace conv bytes can disagree with its own per-stream frame.len aggregate | byte-sums verified on the deduped export; frame counts on the raw trace                                       | M3.3 (this milestone)           |
+| R7  | no `-z conv,icmp` in tshark 4.6.9                                                                                           | ICMP flows verified through conv,ip/ipv6 pair rows on protocol-pure pairs                                     | M3.3                            |
+| R8  | TLS decryption out of scope                                                                                                 | SNI/handshake metadata only by design (user-approved scope)                                                   | project rules                   |
 
 ---
 
@@ -268,12 +268,12 @@ strobe-packet-tracker/
 the verified FlowEngine — contributed by a second agent and then verified and
 wired by the primary agent into the CLI, exactly the same bar as M1–M3.
 
-| File | Role | Verification performed |
-|---|---|---|
-| `src/watch.ts` | directory scanner → per-trace HTML reports + aggregate `index.html` dashboard (+ `--once` / live watch mode) | typecheck clean; ran over **all 67 traces** in `out\scen`: numbers match the M3-verified values exactly (s12: 36387 EPBs / 12129 unique / 12 flows / **16 retrans**; s1: 252/84/7; s11 loopback 0 EPBs = Finding A) |
-| `src/export.ts` | pure serializers: `toJson` / `toCsv` / `toMarkdown` (no I/O — caller writes) | content-checked against known oracle values: s3 DNS map = example.org×2 + cloudflare.com×2; s2 HTTP = 3× `GET /` → `200` chunked (33 unique + 66 copies = 99 EPBs, exact) |
-| `src/report.ts` | per-trace HTML generator | driven through watch.ts runs; no TODO/placeholder hacks (grep-checked) |
-| `src/cli.ts` | **new commands `m4-report` / `m4-watch` / `m4-export`** + npm scripts `m4:report` / `m4:watch` / `m4:export` | executed live (see §2-style command table below) |
+| File            | Role                                                                                                         | Verification performed                                                                                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/watch.ts`  | directory scanner → per-trace HTML reports + aggregate `index.html` dashboard (+ `--once` / live watch mode) | typecheck clean; ran over **all 67 traces** in `out\scen`: numbers match the M3-verified values exactly (s12: 36387 EPBs / 12129 unique / 12 flows / **16 retrans**; s1: 252/84/7; s11 loopback 0 EPBs = Finding A) |
+| `src/export.ts` | pure serializers: `toJson` / `toCsv` / `toMarkdown` (no I/O — caller writes)                                 | content-checked against known oracle values: s3 DNS map = example.org×2 + cloudflare.com×2; s2 HTTP = 3× `GET /` → `200` chunked (33 unique + 66 copies = 99 EPBs, exact)                                           |
+| `src/report.ts` | per-trace HTML generator                                                                                     | driven through watch.ts runs; no TODO/placeholder hacks (grep-checked)                                                                                                                                              |
+| `src/cli.ts`    | **new commands `m4-report` / `m4-watch` / `m4-export`** + npm scripts `m4:report` / `m4:watch` / `m4:export` | executed live (see §2-style command table below)                                                                                                                                                                    |
 
 ### M4 commands that work today (all offline, zero UAC)
 
@@ -293,16 +293,16 @@ per-trace drill-down links) + `json`/`csv`/`md` exports on demand.
 sequence and writes `test-results/test-all.md`; exit code 0 only when ALL
 gates pass. Verified run (2026-10-22, 47.8s total):
 
-| # | gate | result | detail |
-|---|---|---|---|
-| 1 | typecheck | PASS | tsc --noEmit clean |
-| 2 | unit-tests | PASS | pass=36 fail=0 (decoder + flows + loopback tap) |
-| 3 | m1-verify | PASS | frame-by-frame vs tshark (96 frames, 0 mismatches) |
-| 4 | parity-regression | PASS | 14 traces at thresholds (13×100% + s10 by design) |
-| 5 | m3-matrix | PASS | 14/14 traces fully pass |
-| 6 | m4-dashboard | PASS | index.html regenerated (43KB, 67 traces) |
-| 7 | m4-export-formats | PASS | md + csv + json produced and content-sized |
-| 8 | m4a-loopback | PASS | 3 scenarios pass incl. tshark gate |
+| #   | gate              | result | detail                                             |
+| --- | ----------------- | ------ | -------------------------------------------------- |
+| 1   | typecheck         | PASS   | tsc --noEmit clean                                 |
+| 2   | unit-tests        | PASS   | pass=36 fail=0 (decoder + flows + loopback tap)    |
+| 3   | m1-verify         | PASS   | frame-by-frame vs tshark (96 frames, 0 mismatches) |
+| 4   | parity-regression | PASS   | 14 traces at thresholds (13×100% + s10 by design)  |
+| 5   | m3-matrix         | PASS   | 14/14 traces fully pass                            |
+| 6   | m4-dashboard      | PASS   | index.html regenerated (43KB, 67 traces)           |
+| 7   | m4-export-formats | PASS   | md + csv + json produced and content-sized         |
+| 8   | m4a-loopback      | PASS   | 3 scenarios pass incl. tshark gate                 |
 
 This is now the single command to run after ANY change: it cannot leave a
 regression unnoticed — every layer (decoder, parity, flows, ergonomics, tap)
@@ -314,7 +314,7 @@ has its own gate inside it.
 2. **Story depth (M4-b)** — HTTP/2 + QUIC frame metadata, IPv4 fragment
    reassembly (data already in hand from s8).
 3. **Live-tail capture** — pktmon's real-time mode is unverified; a watch-mode
-   + capture integration would make the dashboard live-speaking.
+   - capture integration would make the dashboard live-speaking.
 
 ---
 
@@ -326,12 +326,12 @@ drivers, no Npcap.
 
 ### What was built (M4a)
 
-| File | Role | Verification performed |
-|---|---|---|
-| `src/pcapngwrite.ts` | minimal pcapng writer (one SHB + one IDB `if_tsresol=6` µs + EPBs, Ethernet linktype 1 — same shape as every trace in the corpus) | roundtrip through `parsePcapng` (unit test): block count, caplen/origLen preserved, µs timestamps exact, tsResolRaw=6 |
-| `src/loopbacktap.ts` | the tap: intercepts `net.createConnection` / `net.createServer` / `dgram.createSocket`, records every verbatim per-connection send (one vantage per direction), synthesizes honest framing (eth + IP + TCP/UDP with correct checksums, real ports/addresses/timings) | unit tests incl. a REAL in-process loopback TCP echo end-to-end through the armed tap (36/36 total tests) |
-| `src/m4Loopback.ts` | M4a runner: runs the three local scenarios through the tap, verifies app-truth AND engine agreement, writes `<scenario>_tap.pcapng` | 22 automated checks across 3 scenarios, ALL PASS |
-| `src/cli.ts` | `m4-loopback` command (`--tshark` flag runs the M3.3 gate on tap traces) | full gate executed on all 3 traces |
+| File                 | Role                                                                                                                                                                                                                                                                 | Verification performed                                                                                                |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
+| `src/pcapngwrite.ts` | minimal pcapng writer (one SHB + one IDB `if_tsresol=6` µs + EPBs, Ethernet linktype 1 — same shape as every trace in the corpus)                                                                                                                                    | roundtrip through `parsePcapng` (unit test): block count, caplen/origLen preserved, µs timestamps exact, tsResolRaw=6 |
+| `src/loopbacktap.ts` | the tap: intercepts `net.createConnection` / `net.createServer` / `dgram.createSocket`, records every verbatim per-connection send (one vantage per direction), synthesizes honest framing (eth + IP + TCP/UDP with correct checksums, real ports/addresses/timings) | unit tests incl. a REAL in-process loopback TCP echo end-to-end through the armed tap (36/36 total tests)             |
+| `src/m4Loopback.ts`  | M4a runner: runs the three local scenarios through the tap, verifies app-truth AND engine agreement, writes `<scenario>_tap.pcapng`                                                                                                                                  | 22 automated checks across 3 scenarios, ALL PASS                                                                      |
+| `src/cli.ts`         | `m4-loopback` command (`--tshark` flag runs the M3.3 gate on tap traces)                                                                                                                                                                                             | full gate executed on all 3 traces                                                                                    |
 
 ### Honesty contract (printed with every run)
 
@@ -383,4 +383,3 @@ Moved to **content-based direction decision** (request lines fail the
 `HTTP/`-start gate and statuses fail the `METHOD_RE` gate — the two are
 mutually exclusive), with a2b-first preference preserving M3.3 behavior.
 Parity re-run identical on all 14 traces; loopback statuses now attach.
-

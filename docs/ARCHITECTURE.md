@@ -52,15 +52,15 @@ Verified / Exports`) with its own factual content.
 
 ## 2. Layering rules
 
-| Layer | May import | Node builtins it uses | May spawn |
-|---|---|---|---|
-| `engine/` | only `engine/` | `crypto` (sha1 hashing in dedupe), `fs` (ONE `readFileSync` convenience: `analyzePcapFile` in flows.ts — the analysis core `buildFlows` stays pure) | **nothing** |
-| `capture/` | `engine/`, `traffic/`, `paths.ts` | `fs`, `path`, `child_process` | pktmon, powershell (elevated bundles) |
-| `traffic/` | `capture/backend.ts` (types), `capture/pktmon.ts` (runCommand) | `dns`, `net`, `os`, `fs`, `dgram`, `crypto` | curl, ping, arp, ipconfig, msedge — all non-elevated, argv arrays only |
-| `verify/` | `engine/`, `capture/pktmon.ts`, `paths.ts` | `fs`, `path`, `crypto` | **tshark** (the oracle) |
-| `reporting/` | `engine/` only | `fs`, `path`, `child_process` (openInBrowser uses `exec` with a fixed string — the one deliberate exception to the argv-array rule) | browser open (watch mode) |
-| `tap/` | `engine/`, `traffic/` | `net`, `dgram`, `crypto`, `fs` | nothing (in-process interception) |
-| `cli.ts` / `testAll.ts` / `paths.ts` | anything | dispatch + orchestration | testAll spawns tsc/node/tshark |
+| Layer                                | May import                                                     | Node builtins it uses                                                                                                                               | May spawn                                                              |
+| ------------------------------------ | -------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `engine/`                            | only `engine/`                                                 | `crypto` (sha1 hashing in dedupe), `fs` (ONE `readFileSync` convenience: `analyzePcapFile` in flows.ts — the analysis core `buildFlows` stays pure) | **nothing**                                                            |
+| `capture/`                           | `engine/`, `traffic/`, `paths.ts`                              | `fs`, `path`, `child_process`                                                                                                                       | pktmon, powershell (elevated bundles)                                  |
+| `traffic/`                           | `capture/backend.ts` (types), `capture/pktmon.ts` (runCommand) | `dns`, `net`, `os`, `fs`, `dgram`, `crypto`                                                                                                         | curl, ping, arp, ipconfig, msedge — all non-elevated, argv arrays only |
+| `verify/`                            | `engine/`, `capture/pktmon.ts`, `paths.ts`                     | `fs`, `path`, `crypto`                                                                                                                              | **tshark** (the oracle)                                                |
+| `reporting/`                         | `engine/` only                                                 | `fs`, `path`, `child_process` (openInBrowser uses `exec` with a fixed string — the one deliberate exception to the argv-array rule)                 | browser open (watch mode)                                              |
+| `tap/`                               | `engine/`, `traffic/`                                          | `net`, `dgram`, `crypto`, `fs`                                                                                                                      | nothing (in-process interception)                                      |
+| `cli.ts` / `testAll.ts` / `paths.ts` | anything                                                       | dispatch + orchestration                                                                                                                            | testAll spawns tsc/node/tshark                                         |
 
 Two rules that have held since M1 and are checked by review + typecheck:
 
@@ -113,7 +113,7 @@ parse → decode → dedupe → flows path and the identical tshark gate.
 - **tshark as the independent oracle.** Nothing is claimed that wasn't
   compared against Wireshark 4.6.9: frame-by-frame (M1), a 21-column per-
   packet parity metric (M2), and conv/DNS/HTTP/retransmission checks (M3.3).
-  Packets we cannot decode count as *unsupported*, never as matches — the
+  Packets we cannot decode count as _unsupported_, never as matches — the
   parity metric cannot be inflated by ignorance.
 - **One shared dedupe rule** (`engine/dedupe.ts`): "same IP-level bytes +
   capture timestamps within 2 ms = copies of one physical packet". Parity and
@@ -149,35 +149,35 @@ parse → decode → dedupe → flows path and the identical tshark gate.
 All `src/*.ts` files were flat before the restructure. Historical reports
 (written against the flat layout) remain readable with this map:
 
-| Old path | New path |
-|---|---|
-| `src/pcapng.ts` | `src/engine/pcapng.ts` |
-| `src/decoder.ts` | `src/engine/decoder.ts` |
-| `src/dedupe.ts` | `src/engine/dedupe.ts` |
-| `src/flows.ts` | `src/engine/flows.ts` |
-| `src/pcapngwrite.ts` | `src/engine/pcapngwrite.ts` |
-| `src/pcapwrite.ts` | `src/engine/pcapwrite.ts` |
-| `src/backend.ts` | `src/capture/backend.ts` |
-| `src/pktmon.ts` | `src/capture/pktmon.ts` |
-| `src/elevated.ts` | `src/capture/elevated.ts` |
-| `src/pktmonBackend.ts` | `src/capture/pktmonBackend.ts` |
-| `src/m1Capture.ts` | `src/capture/m1Capture.ts` |
-| `src/m1Pick.ts` | `src/capture/m1Pick.ts` |
-| `src/m2Run.ts` | `src/capture/m2Run.ts` |
-| `src/scenarios.ts` | `src/traffic/scenarios.ts` |
-| `src/traffic.ts` | `src/traffic/traffic.ts` |
-| `src/localservers.ts` | `src/traffic/localservers.ts` |
-| `src/dnsgen.ts` | `src/traffic/dnsgen.ts` |
-| `src/m1Verify.ts` | `src/verify/m1Verify.ts` |
-| `src/parity.ts` | `src/verify/parity.ts` |
-| `src/m3Verify.ts` | `src/verify/m3Verify.ts` |
-| `src/report.ts` | `src/reporting/report.ts` |
-| `src/watch.ts` | `src/reporting/watch.ts` |
-| `src/export.ts` | `src/reporting/export.ts` |
-| `src/loopbacktap.ts` | `src/tap/loopbacktap.ts` |
-| `src/m4Loopback.ts` | `src/tap/m4Loopback.ts` |
-| `src/cli.ts` | `src/cli.ts` (path unchanged; now dispatch-only) |
-| `src/testAll.ts` | `src/testAll.ts` (unchanged) |
+| Old path               | New path                                         |
+| ---------------------- | ------------------------------------------------ |
+| `src/pcapng.ts`        | `src/engine/pcapng.ts`                           |
+| `src/decoder.ts`       | `src/engine/decoder.ts`                          |
+| `src/dedupe.ts`        | `src/engine/dedupe.ts`                           |
+| `src/flows.ts`         | `src/engine/flows.ts`                            |
+| `src/pcapngwrite.ts`   | `src/engine/pcapngwrite.ts`                      |
+| `src/pcapwrite.ts`     | `src/engine/pcapwrite.ts`                        |
+| `src/backend.ts`       | `src/capture/backend.ts`                         |
+| `src/pktmon.ts`        | `src/capture/pktmon.ts`                          |
+| `src/elevated.ts`      | `src/capture/elevated.ts`                        |
+| `src/pktmonBackend.ts` | `src/capture/pktmonBackend.ts`                   |
+| `src/m1Capture.ts`     | `src/capture/m1Capture.ts`                       |
+| `src/m1Pick.ts`        | `src/capture/m1Pick.ts`                          |
+| `src/m2Run.ts`         | `src/capture/m2Run.ts`                           |
+| `src/scenarios.ts`     | `src/traffic/scenarios.ts`                       |
+| `src/traffic.ts`       | `src/traffic/traffic.ts`                         |
+| `src/localservers.ts`  | `src/traffic/localservers.ts`                    |
+| `src/dnsgen.ts`        | `src/traffic/dnsgen.ts`                          |
+| `src/m1Verify.ts`      | `src/verify/m1Verify.ts`                         |
+| `src/parity.ts`        | `src/verify/parity.ts`                           |
+| `src/m3Verify.ts`      | `src/verify/m3Verify.ts`                         |
+| `src/report.ts`        | `src/reporting/report.ts`                        |
+| `src/watch.ts`         | `src/reporting/watch.ts`                         |
+| `src/export.ts`        | `src/reporting/export.ts`                        |
+| `src/loopbacktap.ts`   | `src/tap/loopbacktap.ts`                         |
+| `src/m4Loopback.ts`    | `src/tap/m4Loopback.ts`                          |
+| `src/cli.ts`           | `src/cli.ts` (path unchanged; now dispatch-only) |
+| `src/testAll.ts`       | `src/testAll.ts` (unchanged)                     |
 
 New files with no old counterpart: `src/paths.ts` (consolidated the
 duplicated `out` / `out/scen` / `test-results` path constants),

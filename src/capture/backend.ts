@@ -14,9 +14,7 @@ export interface CaptureFilterSpec {
   args: string[];
 }
 
-export type ComponentSelection =
-  | { kind: "ids"; ids: number[] }
-  | { kind: "all" };
+export type ComponentSelection = { kind: "ids"; ids: number[] } | { kind: "all" };
 
 export interface CapturePlan {
   id: string;
@@ -53,7 +51,10 @@ export interface CaptureBackend {
 }
 
 /** File naming contract used by signal handshakes (documented for tests). */
-export function signalPaths(outDir: string, planId: string): {
+export function signalPaths(
+  outDir: string,
+  planId: string,
+): {
   started: string;
   trafficDone: string;
   done: string;

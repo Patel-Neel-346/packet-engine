@@ -33,18 +33,12 @@ function psString(v: string): string {
 }
 
 function planLiteral(p: CapturePlan): string {
-  const comps =
-    p.comps.kind === "all"
-      ? `@('all')`
-      : `@(${p.comps.ids.join(",")})`;
+  const comps = p.comps.kind === "all" ? `@('all')` : `@(${p.comps.ids.join(",")})`;
   const conv = p.convertIds ?? (p.comps.kind === "ids" ? p.comps.ids : []);
   const maxMB = String(p.maxFileMB ?? 64);
   const timeout = String(p.trafficTimeoutSec ?? 75);
   const filters = p.filters
-    .map(
-      (f) =>
-        `@{n=${psString(f.name)};a=@(${f.args.map(psString).join(",")})}`,
-    )
+    .map((f) => `@{n=${psString(f.name)};a=@(${f.args.map(psString).join(",")})}`)
     .join(",");
   return `[pscustomobject]@{id=${psString(p.id)};comps=${comps};conv=@(${conv.join(",")});maxMB=${maxMB};timeoutSec=${timeout};filters=@(${filters})}`;
 }
@@ -84,7 +78,9 @@ export class PktmonBackend implements CaptureBackend {
     L.push(`$LogFile = Join-Path $scen ${psString(`${bundle.bundleId}.log`)}`);
     L.push(`Set-Content -Path $LogFile -Value '=== bundle ${bundle.bundleId} ===' -Encoding ascii`);
     L.push(`function Log($s) { Add-Content -Path $LogFile -Value $s -Encoding ascii }`);
-    L.push(`function First($t) { $one = ($t -replace '(\\r|\\n)+', ' '); if (-not $one) { return '' }; return $one.Substring(0, [Math]::Min(400, $one.Length)) }`);
+    L.push(
+      `function First($t) { $one = ($t -replace '(\\r|\\n)+', ' '); if (-not $one) { return '' }; return $one.Substring(0, [Math]::Min(400, $one.Length)) }`,
+    );
     L.push(`$plans = @(`);
     for (const p of bundle.plans) L.push(`  ${planLiteral(p)}`);
     L.push(`)`);
@@ -96,54 +92,82 @@ export class PktmonBackend implements CaptureBackend {
     L.push(`  Remove-Item $started,$trafficDone,$done -Force -ErrorAction SilentlyContinue`);
     L.push(`  $filterOk = $true`);
     L.push(`  & $pkt stop 2>&1 | Out-Null; Log ('[STEP stop] code=' + $LASTEXITCODE)`);
-    L.push(`  & $pkt filter remove 2>&1 | Out-Null; Log ('[STEP filterRemove] code=' + $LASTEXITCODE)`);
+    L.push(
+      `  & $pkt filter remove 2>&1 | Out-Null; Log ('[STEP filterRemove] code=' + $LASTEXITCODE)`,
+    );
     L.push(`  foreach ($f in $s.filters) {`);
     L.push(`    $o = (& $pkt filter add $f.n @($f.a) 2>&1 | Out-String -Width 16384)`);
-    L.push(`    Log ('[STEP filterAdd ' + $f.n + ' ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`);
+    L.push(
+      `    Log ('[STEP filterAdd ' + $f.n + ' ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`,
+    );
     L.push(`    if ($LASTEXITCODE -ne 0) { $filterOk = $false }`);
     L.push(`  }`);
     L.push(`  if (-not $filterOk) {`);
     L.push(`    & $pkt filter remove 2>&1 | Out-Null`);
-    L.push(`    Log ('[FALLBACK nofilter ' + $s.id + '] filter add failed; proceeding comp-only (M1-proven path)')`);
+    L.push(
+      `    Log ('[FALLBACK nofilter ' + $s.id + '] filter add failed; proceeding comp-only (M1-proven path)')`,
+    );
     L.push(`  }`);
     L.push(`  $compArgs = @($s.comps)`);
     L.push(`  $etl = Join-Path $out ($s.id + '.etl')`);
-    L.push(`  $o = (& $pkt start --capture --comp @compArgs --pkt-size 0 --log-mode multi-file --file-name $etl --file-size ([int]$s.maxMB) 2>&1 | Out-String -Width 16384)`);
+    L.push(
+      `  $o = (& $pkt start --capture --comp @compArgs --pkt-size 0 --log-mode multi-file --file-name $etl --file-size ([int]$s.maxMB) 2>&1 | Out-String -Width 16384)`,
+    );
     L.push(`  Log ('[STEP start ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`);
     L.push(`  if ($LASTEXITCODE -ne 0) { $code = $LASTEXITCODE }`);
     L.push(`  Set-Content -Path $started -Value 'started' -Encoding ascii`);
     L.push(`  $deadline = (Get-Date).AddSeconds([int]$s.timeoutSec)`);
-    L.push(`  while (-not (Test-Path $trafficDone) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 250 }`);
+    L.push(
+      `  while (-not (Test-Path $trafficDone) -and ((Get-Date) -lt $deadline)) { Start-Sleep -Milliseconds 250 }`,
+    );
     L.push(`  Log ('[STEP trafficwait ' + $s.id + '] signalSeen=' + (Test-Path $trafficDone))`);
     L.push(`  Start-Sleep -Milliseconds 800`);
     L.push(`  $o = (& $pkt counters 2>&1 | Out-String -Width 16384)`);
     L.push(`  Log ('[STEP counters ' + $s.id + '] code=' + $LASTEXITCODE + ' >>> ' + $o)`);
     L.push(`  $o = (& $pkt stop 2>&1 | Out-String -Width 16384)`);
     L.push(`  Log ('[STEP stopAfter ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`);
-    L.push(`  Remove-Item (Join-Path $scen ($s.id + '*.pcapng')) -Force -ErrorAction SilentlyContinue`);
-    L.push(`  $etls = @(Get-ChildItem -Path $out -Filter ($s.id + '*.etl') | Sort-Object Length -Descending)`);
-    L.push(`  Log ('[STEP etlLocate ' + $s.id + '] ' + (($etls | ForEach-Object { $_.Name + ':' + $_.Length }) -join ';'))`);
+    L.push(
+      `  Remove-Item (Join-Path $scen ($s.id + '*.pcapng')) -Force -ErrorAction SilentlyContinue`,
+    );
+    L.push(
+      `  $etls = @(Get-ChildItem -Path $out -Filter ($s.id + '*.etl') | Sort-Object Length -Descending)`,
+    );
+    L.push(
+      `  Log ('[STEP etlLocate ' + $s.id + '] ' + (($etls | ForEach-Object { $_.Name + ':' + $_.Length }) -join ';'))`,
+    );
     L.push(`  $main = $etls[0]`);
     L.push(`  if ($main -eq $null) {`);
     L.push(`    Log ('[FAIL etlLocate ' + $s.id + '] no ETL produced'); $code = 1`);
     L.push(`    Set-Content -Path $done -Value 'noetl' -Encoding ascii`);
     L.push(`  } else {`);
-    L.push(`    $o = (& $pkt etl2pcap $main.FullName --out (Join-Path $scen ($s.id + '_all.pcapng')) 2>&1 | Out-String -Width 16384)`);
+    L.push(
+      `    $o = (& $pkt etl2pcap $main.FullName --out (Join-Path $scen ($s.id + '_all.pcapng')) 2>&1 | Out-String -Width 16384)`,
+    );
     L.push(`    Log ('[STEP etl2pcapAll ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`);
     L.push(`    $allFile = Join-Path $scen ($s.id + '_all.pcapng')`);
-    L.push(`    if (-not (Test-Path $allFile) -or ((Get-Item $allFile).Length -eq 0)) { Log ('[FAIL etl2pcapAll ' + $s.id + '] missing or 0-byte output'); $code = 1 }`);
+    L.push(
+      `    if (-not (Test-Path $allFile) -or ((Get-Item $allFile).Length -eq 0)) { Log ('[FAIL etl2pcapAll ' + $s.id + '] missing or 0-byte output'); $code = 1 }`,
+    );
     L.push(`    $conv = @($s.conv)`);
     L.push(`    foreach ($cid in $conv) {`);
     L.push(`      if ($cid -ne 'all') {`);
-    L.push(`        $o = (& $pkt etl2pcap $main.FullName --component-id $cid --out (Join-Path $scen ($s.id + '_c' + $cid + '.pcapng')) 2>&1 | Out-String -Width 16384)`);
-    L.push(`        Log ('[STEP etl2pcapC' + $cid + ' ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`);
+    L.push(
+      `        $o = (& $pkt etl2pcap $main.FullName --component-id $cid --out (Join-Path $scen ($s.id + '_c' + $cid + '.pcapng')) 2>&1 | Out-String -Width 16384)`,
+    );
+    L.push(
+      `        Log ('[STEP etl2pcapC' + $cid + ' ' + $s.id + '] code=' + $LASTEXITCODE + ' ' + (First $o))`,
+    );
     L.push(`      }`);
     L.push(`    }`);
     L.push(`    Set-Content -Path $done -Value 'done' -Encoding ascii`);
     L.push(`  }`);
     L.push(`}`);
-    L.push(`Set-Content -Path (Join-Path $scen '_bundle.done') -Value ('exit=' + $code) -Encoding ascii`);
-    L.push(`Set-Content -Path (Join-Path $scen '_bundle.exitcode') -Value ([string]$code) -Encoding ascii`);
+    L.push(
+      `Set-Content -Path (Join-Path $scen '_bundle.done') -Value ('exit=' + $code) -Encoding ascii`,
+    );
+    L.push(
+      `Set-Content -Path (Join-Path $scen '_bundle.exitcode') -Value ([string]$code) -Encoding ascii`,
+    );
     L.push(`exit $code`);
     return L.join("\r\n");
   }

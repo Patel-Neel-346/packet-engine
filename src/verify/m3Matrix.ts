@@ -70,15 +70,19 @@ export async function runM3Matrix(): Promise<number> {
       for (const m of c.mismatches) md.push(`> mismatch: ${m}`);
     }
     md.push("");
-    if (t.ok) fullPass++; else withFindings++;
-    fs.writeFileSync(
-      path.join(SCEN_DIR, "m3_results.json"),
-      JSON.stringify(jsonOut, null, 2),
-    );
+    if (t.ok) fullPass++;
+    else withFindings++;
+    fs.writeFileSync(path.join(SCEN_DIR, "m3_results.json"), JSON.stringify(jsonOut, null, 2));
   }
-  md.push("---", "", `**Summary: ${fullPass}/${ALL_TRACES.length} traces fully pass; ${withFindings} with findings.**`);
+  md.push(
+    "---",
+    "",
+    `**Summary: ${fullPass}/${ALL_TRACES.length} traces fully pass; ${withFindings} with findings.**`,
+  );
   fs.mkdirSync("test-results", { recursive: true });
   fs.writeFileSync("test-results/milestone3-checks.md", md.join("\n"));
-  console.log(`\ndone: ${fullPass}/${ALL_TRACES.length} fully pass → test-results/milestone3-checks.md`);
+  console.log(
+    `\ndone: ${fullPass}/${ALL_TRACES.length} fully pass → test-results/milestone3-checks.md`,
+  );
   return fullPass === ALL_TRACES.length ? 0 : 1;
 }

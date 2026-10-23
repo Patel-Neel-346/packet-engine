@@ -34,9 +34,7 @@ export interface ElevatedResult {
 
 function assertSafePath(p: string): void {
   if (p.includes(" ") || p.includes("'") || p.includes('"')) {
-    throw new Error(
-      `elevated runner: path has spaces/quotes, unsupported in this prototype: ${p}`,
-    );
+    throw new Error(`elevated runner: path has spaces/quotes, unsupported in this prototype: ${p}`);
   }
 }
 
@@ -75,22 +73,14 @@ export async function runElevatedScript(ps1: string): Promise<ElevatedResult> {
   }>((resolve, reject) => {
     const child: ChildProcess = spawn(
       powershellExe(),
-      [
-        "-NoProfile",
-        "-ExecutionPolicy",
-        "Bypass",
-        "-Command",
-        wrapperCommand(ps1),
-      ],
+      ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", wrapperCommand(ps1)],
       { windowsHide: true, stdio: ["ignore", "pipe", "pipe"] },
     );
     const out: Buffer[] = [];
     const err: Buffer[] = [];
     child.stdout!.on("data", (c: Buffer) => out.push(c));
     child.stderr!.on("data", (c: Buffer) => err.push(c));
-    child.on("error", (e) =>
-      reject(new Error(`failed to spawn elevated wrapper: ${e.message}`)),
-    );
+    child.on("error", (e) => reject(new Error(`failed to spawn elevated wrapper: ${e.message}`)));
     child.on("close", (code) => {
       resolve({
         code,
@@ -100,9 +90,7 @@ export async function runElevatedScript(ps1: string): Promise<ElevatedResult> {
     });
   });
 
-  const logContent = fs.existsSync(logFile)
-    ? fs.readFileSync(logFile, "utf8")
-    : "";
+  const logContent = fs.existsSync(logFile) ? fs.readFileSync(logFile, "utf8") : "";
   let recordedExitCode: number | null = null;
   if (fs.existsSync(exitCodeFile)) {
     const raw = fs.readFileSync(exitCodeFile, "utf8").trim();

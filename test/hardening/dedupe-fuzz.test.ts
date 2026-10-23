@@ -14,13 +14,17 @@ import { buildFlows } from "../../src/engine/flows.ts";
 describe("dedupe catalog (J)", () => {
   it("dedupe J1: the same IP packet as bare-IP and ethernet copies -> IDENTICAL ipHash (framing tolerance)", () => {
     // full ethernet frame
-    const ethFrame = [tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH, 1, 1, Buffer.from("z") )]
-      .map((f) => f)[0];
+    const ethFrame = [tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH, 1, 1, Buffer.from("z"))].map(
+      (f) => f,
+    )[0];
     // bare-IP copy = the same bytes minus the 14-byte ethernet header
     const bare = ethFrame.subarray(14);
     const a = decode(1, ethFrame);
     const b = decode(1, Buffer.concat([Buffer.from("deadb00f1234", "hex"), bare])); // fake ethlabel
-    (b as unknown as { __bytes: Buffer }).__bytes = Buffer.concat([Buffer.from("deadb00f1234", "hex"), bare]);
+    (b as unknown as { __bytes: Buffer }).__bytes = Buffer.concat([
+      Buffer.from("deadb00f1234", "hex"),
+      bare,
+    ]);
     (b as unknown as { __frame: number }).__frame = 1;
     (a as unknown as { __bytes: Buffer }).__bytes = ethFrame;
     void eth;
@@ -39,7 +43,9 @@ describe("dedupe catalog (J)", () => {
   });
 
   it("dedupe J3: a non-IP packet (arp etc.) has ipHash null and forms its OWN group", () => {
-    const parsed = makePcap([tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH, 1, 1, Buffer.from("z"))]);
+    const parsed = makePcap([
+      tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH, 1, 1, Buffer.from("z")),
+    ]);
     const decoded = decodeAllPackets(parsed);
     const d = decoded[0];
     (d as unknown as { __bytes: Buffer }).__bytes = parsed.packets[0].data;
@@ -59,7 +65,7 @@ describe("dedupe catalog (J)", () => {
     const out = dedupePackets(parsed, decodeAllPackets(parsed));
     expect(out.groups).toHaveLength(2);
     expect(out.groups[0].members).toEqual([0, 1]); // 1800 ≤ 2000 after first
-    expect(out.groups[1].members).toEqual([2]);    // 3600 > 2000 from the rep
+    expect(out.groups[1].members).toEqual([2]); // 3600 > 2000 from the rep
   });
 
   it("dedupe J5: tolerance edge — copies 1999µs and 2001µs apart -> merged and not merged respectively (M2 dedupe rule)", () => {
@@ -102,7 +108,7 @@ function mulberry32(seed: number): () => number {
     t += 0x6d2b79f5;
     let r = Math.imul(t ^ (t >>> 15), 1 | t);
     r = (r + Math.imul(r ^ (r >>> 7), 61 | r)) >>> 0;
-    return ((r ^ (r >>> 14)) >>> 0) / 0x10000 / 2 + ((r ^ (r >>> 14)) >>> 0) / 4294967296 * 0; // normalized below
+    return ((r ^ (r >>> 14)) >>> 0) / 0x10000 / 2 + (((r ^ (r >>> 14)) >>> 0) / 4294967296) * 0; // normalized below
   };
 }
 
@@ -134,14 +140,19 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
     };
     const frames = [
       tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH, 1, 1, Buffer.from("payload-data")),
-      Buffer.concat([ethHdr(0x86dd), (() => {
-        const ip6 = Buffer.alloc(48);
-        ip6[0] = 0x60;
-        ip6[7] = 17;
-        ip6.write("\"20010db8\".start", 8); // garbage-y src (never read as text)
-        ip6[20 + 0] = 0x11; ip6[20 + 2] = 0x00; ip6[20 + 3] = 0x01;
-        return ip6;
-      })()]),
+      Buffer.concat([
+        ethHdr(0x86dd),
+        (() => {
+          const ip6 = Buffer.alloc(48);
+          ip6[0] = 0x60;
+          ip6[7] = 17;
+          ip6.write('"20010db8".start', 8); // garbage-y src (never read as text)
+          ip6[20 + 0] = 0x11;
+          ip6[20 + 2] = 0x00;
+          ip6[20 + 3] = 0x01;
+          return ip6;
+        })(),
+      ]),
       Buffer.concat([ethHdr(0x0806), ip4Hdr("1.2.3.4", "5.6.7.8", 1, 28)]), // ARP
     ];
     let count = 0;
@@ -163,11 +174,20 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
   });
 
   it("fuzz K3: single-bit flips across 5k variants never throw (decode continues or names the failure)", () => {
-    const frame = tcpPkt("10.0.0.1", 1000, "10.0.0.2", 443, PSH, 1, 1, Buffer.from("\x16\x03\x03\x00\x10" + "1".repeat(16), "latin1"));
+    const frame = tcpPkt(
+      "10.0.0.1",
+      1000,
+      "10.0.0.2",
+      443,
+      PSH,
+      1,
+      1,
+      Buffer.from("\x16\x03\x03\x00\x10" + "1".repeat(16), "latin1"),
+    );
     for (let i = 0; i < 5000; i++) {
       const b = Buffer.from(frame);
       const bit = Math.floor(Math.abs(Math.sin(i) * 1e6)) % (b.length * 8);
-      b[Math.floor(bit / 8)] ^= (1 << bit % 8) & 0xff;
+      b[Math.floor(bit / 8)] ^= (1 << (bit % 8)) & 0xff;
       const r = decode(1, b);
       expect(Array.isArray(r.errors)).toBe(true);
     }
@@ -206,7 +226,11 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
       const rIp = decode(1, bIp);
       expect(Array.isArray(rIp.errors)).toBe(true);
 
-      const uFrame = Buffer.concat([ethHdr(0x0800), ip4Hdr("10.0.0.1", "10.0.0.2", 17, 12), Buffer.alloc(12)]);
+      const uFrame = Buffer.concat([
+        ethHdr(0x0800),
+        ip4Hdr("10.0.0.1", "10.0.0.2", 17, 12),
+        Buffer.alloc(12),
+      ]);
       uFrame.writeUInt16BE(val, 14 + 20 + 4);
       const rUdp = decode(1, uFrame);
       expect(Array.isArray(rUdp.errors)).toBe(true);
@@ -215,7 +239,10 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
 
   it("fuzz K6: round-trip property test — generated valid packets decode back to identical input fields (500 cases, catalog K6)", () => {
     let seed = 0x12345678;
-    const rnd = () => { seed = (seed * 1664525 + 1013904223) >>> 0; return seed; };
+    const rnd = () => {
+      seed = (seed * 1664525 + 1013904223) >>> 0;
+      return seed;
+    };
     for (let i = 0; i < 500; i++) {
       const sport = 1024 + (rnd() % 60000);
       const dport = 1 + (rnd() % 65534);
@@ -239,7 +266,9 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
   it("fuzz K7: flow tracker fed a random shuffle of segments -> never throws, totals invariant (catalog K7)", () => {
     const pkts: Buffer[] = [];
     for (let i = 0; i < 10; i++) {
-      pkts.push(tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH | ACK, i * 10, 1, Buffer.alloc(10, i)));
+      pkts.push(
+        tcpPkt("10.0.0.1", 1000, "10.0.0.2", 80, PSH | ACK, i * 10, 1, Buffer.alloc(10, i)),
+      );
     }
     const orderly = buildFlows(makePcap(pkts), "t");
     const totalBytesOrdered = orderly.flows[0].bytes.a2b;
@@ -253,7 +282,10 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
 
   it("fuzz K8: DNS parser fed random cyclic pointer graphs -> always terminates in bounded time (<100ms, catalog K8)", () => {
     let seed = 0x99999999;
-    const rnd = () => { seed = (seed * 1103515245 + 12345) >>> 0; return seed; };
+    const rnd = () => {
+      seed = (seed * 1103515245 + 12345) >>> 0;
+      return seed;
+    };
     for (let i = 0; i < 50; i++) {
       const msg = Buffer.alloc(40);
       msg.writeUInt16BE(0x1234, 0);
@@ -264,7 +296,10 @@ describe("fuzz catalog (K) — bounded random-input battery", () => {
         msg[j + 1] = 12 + (rnd() % 26);
       }
       const t0 = Date.now();
-      const r = decode(1, eth(ip4(udp(msg, { sport: 50000, dport: 53 }), { proto: 17 }), { ethertype: 0x0800 }));
+      const r = decode(
+        1,
+        eth(ip4(udp(msg, { sport: 50000, dport: 53 }), { proto: 17 }), { ethertype: 0x0800 }),
+      );
       const elapsed = Date.now() - t0;
       expect(elapsed).toBeLessThan(100);
       expect(Array.isArray(r.errors)).toBe(true);

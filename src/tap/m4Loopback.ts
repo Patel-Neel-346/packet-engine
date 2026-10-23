@@ -46,7 +46,12 @@ const check = (name: string, pass: boolean, detail: string): CheckResult => ({
   detail,
 });
 
-function findTcpFlow(a: FlowAnalysis, story: TcpStory, clientPort: number, serverPort: number): Flow | null {
+function findTcpFlow(
+  a: FlowAnalysis,
+  story: TcpStory,
+  clientPort: number,
+  serverPort: number,
+): Flow | null {
   return (
     a.flows.find(
       (f) =>
@@ -59,10 +64,7 @@ function findTcpFlow(a: FlowAnalysis, story: TcpStory, clientPort: number, serve
 
 /** Engine reassembled stream bytes must equal the verbatim tap payloads
  * (multiset match across directions + content equality on the matched pair). */
-function checkPayloadMatch(
-  story: TcpStory,
-  flow: Flow,
-): CheckResult {
+function checkPayloadMatch(story: TcpStory, flow: Flow): CheckResult {
   const t = flow.tcp;
   if (!t) return check("stream-payload", false, `flow ${flow.id}: no TCP story`);
   const a2b = t.a2b?.bytes ?? Buffer.alloc(0);
@@ -109,11 +111,7 @@ function checkCommonStructure(a: FlowAnalysis, expectedTcp: number): CheckResult
     tcpCount === expectedTcp,
     `tcp flows=${tcpCount} expected=${expectedTcp}`,
   );
-  const epbOk = check(
-    "epb-consistency",
-    a.totalEpbs > 0,
-    `EPBs=${a.totalEpbs}`,
-  );
+  const epbOk = check("epb-consistency", a.totalEpbs > 0, `EPBs=${a.totalEpbs}`);
   return [ret0, gap0, tcpOk, epbOk];
 }
 
@@ -129,44 +127,83 @@ function verifyScenario(
 
   if (id === "s2_local_split") {
     // 2 clients on 127.0.0.1:ctx.httpPort + 1 client on ctx.localIp:ctx.httpPort-1
-    checks.push(check("conn-count", tap.tcpConnCount === 3, `tcp conns=${tap.tcpConnCount} expected=3`));
+    checks.push(
+      check("conn-count", tap.tcpConnCount === 3, `tcp conns=${tap.tcpConnCount} expected=3`),
+    );
     for (const story of stories) {
       const c2sOk =
         story.c2sPayload.subarray(0, 4).toString("ascii") === "GET " &&
         story.c2sPayload.includes("Host: ");
-      checks.push(check("request-shape", c2sOk, `conn#${story.id} c2s starts "${story.c2sPayload.subarray(0, 20).toString("ascii")}"`));
+      checks.push(
+        check(
+          "request-shape",
+          c2sOk,
+          `conn#${story.id} c2s starts "${story.c2sPayload.subarray(0, 20).toString("ascii")}"`,
+        ),
+      );
       const resOk = story.s2cPayload.includes("HTTP/1.1 200 OK");
-      checks.push(check("response-shape", resOk, `conn#${story.id} s2c head "${story.s2cPayload.subarray(0, 15).toString("ascii")}"`));
+      checks.push(
+        check(
+          "response-shape",
+          resOk,
+          `conn#${story.id} s2c head "${story.s2cPayload.subarray(0, 15).toString("ascii")}"`,
+        ),
+      );
       const flow = findTcpFlow(a, story, story.clientPort, story.serverPort);
       if (flow) {
         const st = flow.http?.responses[0]?.status;
-        checks.push(check("http-200", st === 200, `conn#${story.id} engine http status=${st ?? "none"}`));
+        checks.push(
+          check("http-200", st === 200, `conn#${story.id} engine http status=${st ?? "none"}`),
+        );
         checks.push(checkPayloadMatch(story, flow));
       } else {
-        checks.push(check("flow-match", false, `conn#${story.id} no engine flow for ${story.clientPort}->${story.serverPort}`));
+        checks.push(
+          check(
+            "flow-match",
+            false,
+            `conn#${story.id} no engine flow for ${story.clientPort}->${story.serverPort}`,
+          ),
+        );
       }
     }
     const appOk = app.steps
       .filter((s) => s.step.startsWith("local_http"))
       .every((s) => s.code === 0);
-    checks.push(check("app-truth", appOk, app.steps.filter((s) => s.step.startsWith("local_http")).map((s) => `${s.step}: code=${s.code} ${s.detail}`).join("; ") || "no steps"));
+    checks.push(
+      check(
+        "app-truth",
+        appOk,
+        app.steps
+          .filter((s) => s.step.startsWith("local_http"))
+          .map((s) => `${s.step}: code=${s.code} ${s.detail}`)
+          .join("; ") || "no steps",
+      ),
+    );
     checks.push(...checkCommonStructure(a, 3));
   } else if (id === "s13_ws") {
     // one upgrade per host (127.0.0.1 and site IP)
-    checks.push(check("conn-count", tap.tcpConnCount === 2, `tcp conns=${tap.tcpConnCount} expected=2`));
+    checks.push(
+      check("conn-count", tap.tcpConnCount === 2, `tcp conns=${tap.tcpConnCount} expected=2`),
+    );
     for (const story of stories) {
-      const reqOk = story.c2sPayload.includes("Upgrade: websocket") && story.c2sPayload.includes("Sec-WebSocket-Key:");
+      const reqOk =
+        story.c2sPayload.includes("Upgrade: websocket") &&
+        story.c2sPayload.includes("Sec-WebSocket-Key:");
       checks.push(check("ws-request", reqOk, `conn#${story.id} upgrade request observed`));
       const RES_FRAME = Buffer.from([0x81, 0x05, 0x68, 0x65, 0x6c, 0x6c, 0x6f]); // text "hello"
       const resOk =
         story.s2cPayload.includes("HTTP/1.1 101 Switching Protocols") &&
         story.s2cPayload.includes("Sec-WebSocket-Accept:") &&
         story.s2cPayload.subarray(story.s2cPayload.length - RES_FRAME.length).equals(RES_FRAME);
-      checks.push(check("ws-response", resOk, `conn#${story.id} 101 + server hello frame observed`));
+      checks.push(
+        check("ws-response", resOk, `conn#${story.id} 101 + server hello frame observed`),
+      );
       const flow = findTcpFlow(a, story, story.clientPort, story.serverPort);
       if (flow) {
         const st = flow.http?.responses[0]?.status;
-        checks.push(check("engine-101", st === 101, `conn#${story.id} engine http status=${st ?? "none"}`));
+        checks.push(
+          check("engine-101", st === 101, `conn#${story.id} engine http status=${st ?? "none"}`),
+        );
         checks.push(checkPayloadMatch(story, flow));
       } else {
         checks.push(check("flow-match", false, `conn#${story.id} no engine flow`));
@@ -175,15 +212,32 @@ function verifyScenario(
     const appOk = app.steps
       .filter((s) => s.step.startsWith("ws_upgrade"))
       .every((s) => s.code === 0);
-    checks.push(check("app-truth", appOk, app.steps.filter((s) => s.step.startsWith("ws_upgrade")).map((s) => `${s.step}: ${s.detail}`).join("; ") || "no steps"));
+    checks.push(
+      check(
+        "app-truth",
+        appOk,
+        app.steps
+          .filter((s) => s.step.startsWith("ws_upgrade"))
+          .map((s) => `${s.step}: ${s.detail}`)
+          .join("; ") || "no steps",
+      ),
+    );
     checks.push(...checkCommonStructure(a, 2));
   } else if (id === "s11_loopback") {
     // 2 TCP echo conversations (127.0.0.1 + site IP) + 1 UDP echo pair
-    checks.push(check("conn-count", tap.tcpConnCount === 2, `tcp conns=${tap.tcpConnCount} expected=2`));
+    checks.push(
+      check("conn-count", tap.tcpConnCount === 2, `tcp conns=${tap.tcpConnCount} expected=2`),
+    );
     for (const story of stories) {
       const cOk = story.c2sPayload.toString("utf8") === "tcp-loopback";
       const rOk = story.s2cPayload.toString("utf8") === "echo:tcp-loopback";
-      checks.push(check("echo-bytes", cOk && rOk, `conn#${story.id} c2s="${story.c2sPayload.toString("utf8")}" s2c="${story.s2cPayload.toString("utf8")}"`));
+      checks.push(
+        check(
+          "echo-bytes",
+          cOk && rOk,
+          `conn#${story.id} c2s="${story.c2sPayload.toString("utf8")}" s2c="${story.s2cPayload.toString("utf8")}"`,
+        ),
+      );
       const flow = findTcpFlow(a, story, story.clientPort, story.serverPort);
       if (flow) checks.push(checkPayloadMatch(story, flow));
       else checks.push(check("flow-match", false, `conn#${story.id} no engine flow`));
@@ -192,9 +246,14 @@ function verifyScenario(
     const udpOk = (() => {
       const c = udp.flatMap((u) => u.events).find((e) => e.dir === "c2s");
       const r = udp.flatMap((u) => u.events).find((e) => e.dir === "s2c");
-      if (!c || !r) return { pass: false, detail: `udp datagrams c2s=${c ? 1 : 0} s2c=${r ? 1 : 0}` };
-      const same = c.payload.equals(r.payload) && c.payload.toString("utf8") === "udp-loopback-0123456789";
-      return { pass: same, detail: `udp ${c.payload.length}B echo ${same ? "roundtrip exact" : "MISMATCH"}` };
+      if (!c || !r)
+        return { pass: false, detail: `udp datagrams c2s=${c ? 1 : 0} s2c=${r ? 1 : 0}` };
+      const same =
+        c.payload.equals(r.payload) && c.payload.toString("utf8") === "udp-loopback-0123456789";
+      return {
+        pass: same,
+        detail: `udp ${c.payload.length}B echo ${same ? "roundtrip exact" : "MISMATCH"}`,
+      };
     })();
     checks.push(check("udp-echo", udpOk.pass, udpOk.detail));
     const udpFlow = a.flows.find((f) => f.kind === "udp");
@@ -202,7 +261,9 @@ function verifyScenario(
       check(
         "udp-flow",
         !!udpFlow && udpFlow.uniquePackets === 2,
-        udpFlow ? `udp flow unique packets=${udpFlow.uniquePackets} expected=2` : "no udp flow in engine",
+        udpFlow
+          ? `udp flow unique packets=${udpFlow.uniquePackets} expected=2`
+          : "no udp flow in engine",
       ),
     );
     const appOk = app.steps
@@ -258,7 +319,10 @@ export async function runM4Loopback(opts: {
       tap.disarm();
     }
     const file = path.join(outDir, `${def.id}_tap.pcapng`);
-    const frames = tap.exportTrace(file, `strobe-packet-tracker m4a loopback tap - scenario ${def.id}`);
+    const frames = tap.exportTrace(
+      file,
+      `strobe-packet-tracker m4a loopback tap - scenario ${def.id}`,
+    );
     const a = analyzePcapFile(file);
     const checks = verifyScenario(def.id, tap, a, app, ctx);
 
@@ -298,10 +362,14 @@ export function printM4Loopback(runs: LoopbackRun[]): string[] {
   const lines: string[] = [];
   lines.push("");
   lines.push("M4-a loopback vantage - userspace tap results");
-  lines.push("honesty contract: payloads/ports/timing REAL; ISNs/ACK-placement/kernel-segmentation SYNTHESIZED");
+  lines.push(
+    "honesty contract: payloads/ports/timing REAL; ISNs/ACK-placement/kernel-segmentation SYNTHESIZED",
+  );
   lines.push("");
   for (const r of runs) {
-    lines.push(`== ${r.id}  frames=${r.frames} tcpConns=${r.tcpConns} udpFlows=${r.udpFlows}  ${r.ok ? "PASS" : "FAIL"}`);
+    lines.push(
+      `== ${r.id}  frames=${r.frames} tcpConns=${r.tcpConns} udpFlows=${r.udpFlows}  ${r.ok ? "PASS" : "FAIL"}`,
+    );
     lines.push(`   trace: ${r.file} (${bytesLabel(fs.statSync(r.file).size)})`);
     for (const c of r.checks) {
       lines.push(`   [${c.pass ? "PASS" : "FAIL"}] ${c.name}: ${c.detail}`);

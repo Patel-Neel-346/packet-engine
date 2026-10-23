@@ -351,19 +351,9 @@ function parseIpv4(
   const ttl = bytes[off + 8];
   const proto = bytes[off + 9];
 
-  const src = [
-    bytes[off + 12],
-    bytes[off + 13],
-    bytes[off + 14],
-    bytes[off + 15],
-  ].join(".");
+  const src = [bytes[off + 12], bytes[off + 13], bytes[off + 14], bytes[off + 15]].join(".");
 
-  const dst = [
-    bytes[off + 16],
-    bytes[off + 17],
-    bytes[off + 18],
-    bytes[off + 19],
-  ].join(".");
+  const dst = [bytes[off + 16], bytes[off + 17], bytes[off + 18], bytes[off + 19]].join(".");
 
   // Verify IPv4 header checksum
   let sum = 0;
@@ -410,9 +400,18 @@ function parseIpv4(
 function formatV6(q: number[]): string {
   // RFC 5952 §5: IPv4-mapped address (::ffff:a.b.c.d)
   if (
-    q[0] === 0 && q[1] === 0 && q[2] === 0 && q[3] === 0 &&
-    q[4] === 0 && q[5] === 0 && q[6] === 0 && q[7] === 0 &&
-    q[8] === 0 && q[9] === 0 && q[10] === 0xff && q[11] === 0xff
+    q[0] === 0 &&
+    q[1] === 0 &&
+    q[2] === 0 &&
+    q[3] === 0 &&
+    q[4] === 0 &&
+    q[5] === 0 &&
+    q[6] === 0 &&
+    q[7] === 0 &&
+    q[8] === 0 &&
+    q[9] === 0 &&
+    q[10] === 0xff &&
+    q[11] === 0xff
   ) {
     return `::ffff:${q[12]}.${q[13]}.${q[14]}.${q[15]}`;
   }
@@ -461,7 +460,9 @@ function parseIpv6(
 
   const payloadLen = bytes.readUInt16BE(off + 4);
   if (payloadLen > bytes.length - off - 40) {
-    errors.push(`ipv6.truncated: payload length ${payloadLen} exceeds captured ${bytes.length - off - 40}`);
+    errors.push(
+      `ipv6.truncated: payload length ${payloadLen} exceeds captured ${bytes.length - off - 40}`,
+    );
   }
 
   const ttlHop = bytes[off + 7];
@@ -589,11 +590,15 @@ function parseTcpOptions(
 
     const len = cur + 2 <= bytes.length ? bytes[cur + 1] : 0;
     if (len < 2) {
-      errors.push(`tcp.bad-options: option kind ${kind} length ${len} (minimum 2, RFC 9293 §3.3.1)`);
+      errors.push(
+        `tcp.bad-options: option kind ${kind} length ${len} (minimum 2, RFC 9293 §3.3.1)`,
+      );
       break;
     }
     if (cur + len > optEnd || cur + len > bytes.length) {
-      errors.push(`tcp.bad-options: option kind ${kind} length ${len} overruns the data-offset boundary`);
+      errors.push(
+        `tcp.bad-options: option kind ${kind} length ${len} overruns the data-offset boundary`,
+      );
       break;
     }
 
@@ -622,12 +627,7 @@ function parseTcpOptions(
 /**
  * Dissects a TCP segment header (RFC 9293).
  */
-function parseTcp(
-  bytes: Buffer,
-  off: number,
-  ip: IpInfo,
-  errors: string[],
-): TransportInfo {
+function parseTcp(bytes: Buffer, off: number, ip: IpInfo, errors: string[]): TransportInfo {
   if (bytes.length < off + 20) {
     errors.push(`tcp: header truncated (have ${bytes.length - off} need 20)`);
     return { kind: "other", proto: 6, payloadLen: Math.max(0, bytes.length - off) };
@@ -689,7 +689,9 @@ function parseUdp(bytes: Buffer, off: number, errors: string[]): TransportInfo {
     errors.push(`udp.bad-length: length ${dgramLen} (RFC 768 minimum is 8; 0 = IPv6 jumbogram)`);
   }
   if (dgramLen > 8 && dgramLen > bytes.length - off) {
-    errors.push(`udp.truncated: declared length ${dgramLen} exceeds captured ${bytes.length - off}`);
+    errors.push(
+      `udp.truncated: declared length ${dgramLen} exceeds captured ${bytes.length - off}`,
+    );
   }
 
   const payloadLen = dgramLen > 8 ? Math.min(dgramLen - 8, Math.max(0, bytes.length - off - 8)) : 0;
@@ -702,7 +704,9 @@ function parseUdp(bytes: Buffer, off: number, errors: string[]): TransportInfo {
 function parseIcmp(bytes: Buffer, off: number, ip: IpInfo, errors: string[]): TransportInfo {
   const avail = bytes.length - off;
   if (avail < 4) {
-    errors.push(`icmp.truncated: ${Math.max(0, avail)} bytes captured, need 4 for type+code (RFC 792 §2)`);
+    errors.push(
+      `icmp.truncated: ${Math.max(0, avail)} bytes captured, need 4 for type+code (RFC 792 §2)`,
+    );
     return {
       kind: "icmp",
       proto: 1,
@@ -734,7 +738,9 @@ function parseIcmp(bytes: Buffer, off: number, ip: IpInfo, errors: string[]): Tr
 function parseIcmpv6(bytes: Buffer, off: number, ip: IpInfo, errors: string[]): TransportInfo {
   const avail = bytes.length - off;
   if (avail < 4) {
-    errors.push(`icmpv6.truncated: ${Math.max(0, avail)} bytes captured, need 4 for type+code (RFC 4443 §2.1)`);
+    errors.push(
+      `icmpv6.truncated: ${Math.max(0, avail)} bytes captured, need 4 for type+code (RFC 4443 §2.1)`,
+    );
     return {
       kind: "icmpv6",
       proto: 58,
@@ -800,7 +806,9 @@ function parseDnsName(
       }
       const targetRel = ((len & 0x3f) << 8) | bytes[cur + 1];
       if (targetRel < 12) {
-        errors.push(`dns.pointer-target: pointer to ${targetRel} points into the DNS header (invalid, RFC 1035 §4.1.4)`);
+        errors.push(
+          `dns.pointer-target: pointer to ${targetRel} points into the DNS header (invalid, RFC 1035 §4.1.4)`,
+        );
         rejected = true;
         break;
       }
@@ -815,7 +823,9 @@ function parseDnsName(
         return { name: labels.join(".") || ".", end: cur + 2, rejected: true };
       }
       if (visited.has(targetRel)) {
-        errors.push(`dns.pointer-loop: pointer target ${targetRel} already visited (bounded termination, RFC 1035 §4.1.4)`);
+        errors.push(
+          `dns.pointer-loop: pointer target ${targetRel} already visited (bounded termination, RFC 1035 §4.1.4)`,
+        );
         rejected = true;
         break;
       }
@@ -871,9 +881,8 @@ function parseDns(bytes: Buffer, off: number, errors: string[], dnsLen?: number)
     return null;
   }
 
-  const messageLen = dnsLen !== undefined && dnsLen > 0
-    ? Math.min(dnsLen, bytes.length - off)
-    : bytes.length - off;
+  const messageLen =
+    dnsLen !== undefined && dnsLen > 0 ? Math.min(dnsLen, bytes.length - off) : bytes.length - off;
 
   const id = bytes.readUInt16BE(off);
   const flags = bytes.readUInt16BE(off + 2);
@@ -914,7 +923,9 @@ function parseDns(bytes: Buffer, off: number, errors: string[], dnsLen?: number)
   // Dissect Answers
   for (let a = 0; a < Math.min(an, 20); a++) {
     if (cur >= bytes.length) {
-      errors.push(`dns.truncated-answers: ${an} answers declared but only ${a} parsed (message truncated)`);
+      errors.push(
+        `dns.truncated-answers: ${an} answers declared but only ${a} parsed (message truncated)`,
+      );
       break;
     }
     const ni = parseDnsName(bytes, cur, errors, off, messageLen);
@@ -935,16 +946,22 @@ function parseDns(bytes: Buffer, off: number, errors: string[], dnsLen?: number)
 
     if (type === 1 && rdLen === 4) {
       // A record
-      dns.aRecords.push(`${bytes[rdStart]}.${bytes[rdStart + 1]}.${bytes[rdStart + 2]}.${bytes[rdStart + 3]}`);
+      dns.aRecords.push(
+        `${bytes[rdStart]}.${bytes[rdStart + 1]}.${bytes[rdStart + 2]}.${bytes[rdStart + 3]}`,
+      );
     } else if (type === 1 && rdLen !== 4) {
-      errors.push(`dns.bad-rdata-length: A record rdata length ${rdLen} (RFC 1035 §3.4.1 expects 4)`);
+      errors.push(
+        `dns.bad-rdata-length: A record rdata length ${rdLen} (RFC 1035 §3.4.1 expects 4)`,
+      );
     } else if (type === 28 && rdLen === 16) {
       // AAAA record
       const q: number[] = [];
       for (let i = 0; i < 16; i++) q.push(bytes[rdStart + i]);
       dns.aaaaRecords.push(formatV6(q));
     } else if (type === 28 && rdLen !== 16) {
-      errors.push(`dns.bad-rdata-length: AAAA record rdata length ${rdLen} (RFC 3596 §2.2 expects 16)`);
+      errors.push(
+        `dns.bad-rdata-length: AAAA record rdata length ${rdLen} (RFC 3596 §2.2 expects 16)`,
+      );
     } else if (type === 41) {
       // EDNS0 OPT record (metadata only)
       dns.edns = true;
@@ -962,11 +979,7 @@ function parseDns(bytes: Buffer, off: number, errors: string[], dnsLen?: number)
 /**
  * Dissects TLS ClientHello or ServerHello handshake records for SNI and version metadata (RFC 8446).
  */
-function parseTlsClientHello(
-  bytes: Buffer,
-  off: number,
-  errors: string[],
-): TlsHelloInfo | null {
+function parseTlsClientHello(bytes: Buffer, off: number, errors: string[]): TlsHelloInfo | null {
   const need = (start: number, n: number): boolean => start + n <= bytes.length;
   if (!need(off, 5)) return null;
   if (bytes[off] !== 0x16) return null; // TLS handshake record byte
@@ -1032,7 +1045,9 @@ function parseTlsClientHello(
   };
 
   if (extListOverruns && sni !== undefined) {
-    errors.push(`tls.truncated-extensions: extension list length ${extLen} exceeds captured ${bytes.length} - ${cur - extLen} bytes`);
+    errors.push(
+      `tls.truncated-extensions: extension list length ${extLen} exceeds captured ${bytes.length} - ${cur - extLen} bytes`,
+    );
   }
   if (supportedVersions.length > 0) info.supportedVersions = supportedVersions;
   if (ech) info.ech = true;
@@ -1078,9 +1093,8 @@ export function decodePacket(linkType: number, bytes: Buffer, origLen: number): 
 
       if (eth.ethertype === 0x0806) {
         // ARP packet (RFC 826)
-        const arpOpcode = bytes.length >= eth.ipOffset + 8
-          ? bytes.readUInt16BE(eth.ipOffset + 6)
-          : undefined;
+        const arpOpcode =
+          bytes.length >= eth.ipOffset + 8 ? bytes.readUInt16BE(eth.ipOffset + 6) : undefined;
         out.transport = {
           kind: "arp",
           proto: 2,
@@ -1100,7 +1114,9 @@ export function decodePacket(linkType: number, bytes: Buffer, origLen: number): 
         if (bare !== null) {
           ipStart = bare;
           if (bare === 0) out.framing = "bareIP";
-          errors.push(`unknown ethertype 0x${eth.ethertype.toString(16)}: IP recovered at offset ${bare}`);
+          errors.push(
+            `unknown ethertype 0x${eth.ethertype.toString(16)}: IP recovered at offset ${bare}`,
+          );
         } else {
           errors.push(`unknown ethertype 0x${eth.ethertype.toString(16)} (no IP payload found)`);
         }
@@ -1156,7 +1172,15 @@ export function decodePacket(linkType: number, bytes: Buffer, origLen: number): 
 
     if (t.kind === "tcp" && t.sport !== undefined) {
       // Verify TCP checksum
-      const c = verifyTransportChecksum(bytes, ipStart, ip.version, 6, nextOffset, ip.payloadLen, 16);
+      const c = verifyTransportChecksum(
+        bytes,
+        ipStart,
+        ip.version,
+        6,
+        nextOffset,
+        ip.payloadLen,
+        16,
+      );
       if (c.valid !== undefined) t.checksumValid = c.valid;
 
       const isTlsPort = t.sport === 443 || t.dport === 443;

@@ -80,14 +80,25 @@ export function udpPkt(
 export function makePcap(frames: Buffer[], tsGapUs = 1000) {
   const iface = { id: 0, linkType: 1, snaplen: 65535, tsResolRaw: 6, name: null, os: null };
   const packets = frames.map((data, i) => ({
-    interfaceId: 0, tsHigh: 0, tsLow: i * tsGapUs,
-    capLen: data.length, origLen: data.length, data,
+    interfaceId: 0,
+    tsHigh: 0,
+    tsLow: i * tsGapUs,
+    capLen: data.length,
+    origLen: data.length,
+    data,
     options: { epbFlags: null, epbHash: null, comment: null, dropCount: null },
   }));
   return {
     shb: { majorVersion: 1, minorVersion: 0, sectionLength: -1n, littleEndian: true },
-    interfaces: [iface], packets, skippedBlocks: [], parseErrors: [],
+    interfaces: [iface],
+    packets,
+    skippedBlocks: [],
+    parseErrors: [],
   };
 }
 
-export const SYN = 0x02, FIN = 0x01, RST = 0x04, PSH = 0x08, ACK = 0x10;
+export const SYN = 0x02,
+  FIN = 0x01,
+  RST = 0x04,
+  PSH = 0x08,
+  ACK = 0x10;

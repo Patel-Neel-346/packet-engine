@@ -31,10 +31,7 @@ export interface GateResult {
 
 const results: GateResult[] = [];
 
-function gateSync(
-  name: string,
-  fn: () => { ok: boolean; detail: string },
-): void {
+function gateSync(name: string, fn: () => { ok: boolean; detail: string }): void {
   const t0 = Date.now();
   process.stdout.write(`[test-all] ${name} ... `);
   try {
@@ -100,7 +97,10 @@ export async function runTestAll(): Promise<GateResult[]> {
       ? runNode([TSC_BIN, "--noEmit"], "tsc --noEmit")
       : (runNpm("typecheck", "tsc --noEmit") ?? { code: 1, stdout: "" });
     const clean = r.code === 0 && !/error TS/.test(r.stdout);
-    return { ok: clean, detail: clean ? "tsc --noEmit clean" : r.stdout.slice(-400) || `exit ${r.code}` };
+    return {
+      ok: clean,
+      detail: clean ? "tsc --noEmit clean" : r.stdout.slice(-400) || `exit ${r.code}`,
+    };
   });
 
   let jestVerboseOutput = "";
@@ -108,8 +108,11 @@ export async function runTestAll(): Promise<GateResult[]> {
   // 2. unit + integration tests (Jest — same suites, structured output)
   gateSync("unit-tests", () => {
     const jestBin = path.join("node_modules", "jest", "bin", "jest.js");
-    const filesFound = ["test/decoder.test.ts", "test/flows.test.ts", "test/loopbacktap.test.ts"]
-      .filter((f) => fs.existsSync(f));
+    const filesFound = [
+      "test/decoder.test.ts",
+      "test/flows.test.ts",
+      "test/loopbacktap.test.ts",
+    ].filter((f) => fs.existsSync(f));
     if (filesFound.length === 0) {
       return { ok: false, detail: "no test files found" };
     }
@@ -137,7 +140,8 @@ export async function runTestAll(): Promise<GateResult[]> {
     const counts =
       passed !== null ? `pass=${passed} fail=${failed ?? 0}` : "counts n/a (gated on exit code)";
     const filesPart = fileCount !== null ? ` across ${fileCount} files` : "";
-    const missing = filesFound.length < 3 ? ` (${filesFound.length}/3 expected suites present)` : "";
+    const missing =
+      filesFound.length < 3 ? ` (${filesFound.length}/3 expected suites present)` : "";
     return { ok, detail: `${counts}${filesPart}${missing}` };
   });
 
@@ -147,7 +151,10 @@ export async function runTestAll(): Promise<GateResult[]> {
       return { ok: false, detail: "out/m1.pcapng missing (run m1 capture first)" };
     }
     const code = await m1Verify();
-    return { ok: code === 0, detail: code === 0 ? "frame-by-frame vs tshark: all pass" : `exit ${code}` };
+    return {
+      ok: code === 0,
+      detail: code === 0 ? "frame-by-frame vs tshark: all pass" : `exit ${code}`,
+    };
   });
 
   // 4. M2 parity regression across the scenario corpus
@@ -155,7 +162,10 @@ export async function runTestAll(): Promise<GateResult[]> {
     const r = runNode(["out/scen/reverify_parity.ts"], "reverify_parity");
     const rows = [...r.stdout.matchAll(/(\S+)\s+parity=\s*([\d.]+)%/g)];
     if (rows.length === 0) {
-      return { ok: false, detail: `no parity rows parsed (exit ${r.code}) — ${r.stdout.slice(-300)}` };
+      return {
+        ok: false,
+        detail: `no parity rows parsed (exit ${r.code}) — ${r.stdout.slice(-300)}`,
+      };
     }
     const bad = rows
       .map((m) => ({ id: m[1], v: Number(m[2]) }))
@@ -171,7 +181,11 @@ export async function runTestAll(): Promise<GateResult[]> {
   gateSync("m3-matrix", () => {
     const r = runNode(["src/cli.ts", "m3-verify"], "m3-verify");
     const m = /done: (\d+)\/(\d+) fully pass/.exec(r.stdout);
-    if (!m) return { ok: false, detail: `matrix summary not found (exit ${r.code}) — ${r.stdout.slice(-300)}` };
+    if (!m)
+      return {
+        ok: false,
+        detail: `matrix summary not found (exit ${r.code}) — ${r.stdout.slice(-300)}`,
+      };
     const [full, total] = [Number(m[1]), Number(m[2])];
     return {
       ok: r.code === 0 && full === total,
@@ -199,7 +213,11 @@ export async function runTestAll(): Promise<GateResult[]> {
       ["out/scen/s2_http_external_all.pcapng", "json"],
     ] as const) {
       const r = runNode(["src/cli.ts", "m4-export", file, fmt], "m4-export");
-      const dest = path.join("out", "m4-reports", `${path.basename(file, path.extname(file))}.${fmt}`);
+      const dest = path.join(
+        "out",
+        "m4-reports",
+        `${path.basename(file, path.extname(file))}.${fmt}`,
+      );
       const good = r.code === 0 && fs.existsSync(dest) && fs.statSync(dest).size > 400;
       okAll = okAll && good;
       parts.push(`${fmt}: ${good ? "ok" : `fail(exit ${r.code})`}`);
@@ -211,9 +229,7 @@ export async function runTestAll(): Promise<GateResult[]> {
   await gateAsync("m4a-loopback", async () => {
     const { allOk, runs } = await runM4Loopback({ withTshark: true });
     for (const line of printM4Loopback(runs)) console.log(line);
-    const perId = runs
-      .map((r: LoopbackRun) => `${r.id}=${r.ok ? "pass" : "fail"}`)
-      .join(",");
+    const perId = runs.map((r: LoopbackRun) => `${r.id}=${r.ok ? "pass" : "fail"}`).join(",");
     return { ok: allOk, detail: `${runs.length} scenarios (${perId})` };
   });
 
@@ -225,15 +241,23 @@ export async function runTestAll(): Promise<GateResult[]> {
   const lines: string[] = [];
   lines.push("# test-all — full verification suite");
   lines.push("");
-  lines.push(`_run: ${new Date().toISOString()}  |  total ${(totalSec).toFixed(1)}s  |  ${results.length - missed.length}/${results.length} gates pass_`);
+  lines.push(
+    `_run: ${new Date().toISOString()}  |  total ${totalSec.toFixed(1)}s  |  ${results.length - missed.length}/${results.length} gates pass_`,
+  );
   lines.push("");
   lines.push("| gate | result | detail | time |");
   lines.push("|---|---|---|---|");
   for (const r of results) {
-    lines.push(`| ${r.name} | ${r.ok ? "PASS" : "FAIL"} | ${r.detail.replace(/\|/g, "/")} | ${(r.ms / 1000).toFixed(1)}s |`);
+    lines.push(
+      `| ${r.name} | ${r.ok ? "PASS" : "FAIL"} | ${r.detail.replace(/\|/g, "/")} | ${(r.ms / 1000).toFixed(1)}s |`,
+    );
   }
   lines.push("");
-  lines.push(allOk ? "**ALL GATES PASS**" : `**${missed.length} GATE(S) FAILED**: ${missed.map((m) => m.name).join(", ")}`);
+  lines.push(
+    allOk
+      ? "**ALL GATES PASS**"
+      : `**${missed.length} GATE(S) FAILED**: ${missed.map((m) => m.name).join(", ")}`,
+  );
 
   if (jestVerboseOutput) {
     lines.push("");
@@ -245,7 +269,9 @@ export async function runTestAll(): Promise<GateResult[]> {
       if (rawLine.startsWith("PASS ") || rawLine.startsWith("FAIL ")) {
         const currentSuite = rawLine.replace(/^(PASS|FAIL)\s+/, "").trim();
         lines.push("");
-        lines.push(`### ${rawLine.startsWith("PASS") ? "✅ PASS" : "❌ FAIL"}: \`${currentSuite}\``);
+        lines.push(
+          `### ${rawLine.startsWith("PASS") ? "✅ PASS" : "❌ FAIL"}: \`${currentSuite}\``,
+        );
         lines.push("");
       } else if (line.startsWith("√ ") || line.startsWith("✔ ")) {
         lines.push(`- [x] ${line.replace(/^[√✔]\s*/, "")}`);
@@ -263,17 +289,19 @@ export async function runTestAll(): Promise<GateResult[]> {
   console.log("");
   console.log("================================================================================");
   for (const r of results) {
-    console.log(`${r.ok ? " PASS" : " FAIL"}  ${r.name.padEnd(22)} ${(r.ms / 1000).toFixed(1)}s  ${r.detail}`);
+    console.log(
+      `${r.ok ? " PASS" : " FAIL"}  ${r.name.padEnd(22)} ${(r.ms / 1000).toFixed(1)}s  ${r.detail}`,
+    );
   }
   console.log("================================================================================");
-  console.log(allOk
-    ? `test-all: ALL ${results.length} gates pass in ${totalSec.toFixed(1)}s -> test-results/test-all.md`
-    : `test-all: ${missed.length}/${results.length} FAILED (${missed.map((m) => m.name).join(", ")}) -> test-results/test-all.md`);
+  console.log(
+    allOk
+      ? `test-all: ALL ${results.length} gates pass in ${totalSec.toFixed(1)}s -> test-results/test-all.md`
+      : `test-all: ${missed.length}/${results.length} FAILED (${missed.map((m) => m.name).join(", ")}) -> test-results/test-all.md`,
+  );
   return results;
 }
 
 function check(coverage: number, bad: Array<{ id: string; v: number }>): string {
-  return coverage >= 10 && bad.length === 0
-    ? `${coverage} traces at thresholds, `
-    : "";
+  return coverage >= 10 && bad.length === 0 ? `${coverage} traces at thresholds, ` : "";
 }
