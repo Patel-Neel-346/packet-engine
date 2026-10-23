@@ -107,7 +107,9 @@ prompt for the whole run; `none` = fully offline and non-elevated.
 |---|---|---|
 | `npm run test:all` | all 8 gates in sequence; exit 0 only when all pass; writes `test-results\test-all.md` | none |
 | `npm run typecheck` | `tsc --noEmit` over `src/**` + `test/**` | none |
-| `npm test` | 36 unit tests: 16 decoder + 17 flows + 3 loopback tap | none |
+| `npm test` | Vitest run: 36 tests in 3 structured suites (16 decoder + 17 flows + 3 loopback tap) | none |
+| `npm run test:watch` | Vitest watch mode — re-runs only affected tests as you edit | none |
+| `npm run test:ui` | Vitest browser dashboard — inspect each suite/assertion visually | none |
 
 ### M1 — capture path
 

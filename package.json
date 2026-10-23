@@ -21,11 +21,15 @@
     "m4:export": "node src/cli.ts m4-export",
     "m4:loopback": "node src/cli.ts m4-loopback",
     "test:all": "node src/cli.ts test-all",
-    "test": "node --test test/decoder.test.ts test/flows.test.ts test/loopbacktap.test.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",
-    "typescript": "^5.9.0"
+    "@vitest/ui": "^5.0.5",
+    "typescript": "^5.9.0",
+    "vitest": "^5.0.5"
   }
 }

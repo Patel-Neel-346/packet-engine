@@ -1,10 +1,27 @@
-// Decoder unit tests on synthetic packets (run: node --test test/).
-// Every fixture's byte layout is written inline so failures are readable.
+// ─────────────────────────────────────────────────────────────────────────────
+// DECODER SUITE — src/engine/decoder.ts
+// Run:  npm test           (one-shot)      npm run test:watch   (live)
+//       npm run test:ui    (browser dashboard)
+//
+// What "passing" means here: every fixture byte layout is written INLINE in
+// this file (see the builders below), so when something breaks you can diff
+// the expectation against the exact bytes without reading engine code.
+//
+// Coverage map:
+//   • ethernet framing        → IPv4/IPv6 next, VLAN tags, bare-IP, raw 802.11
+//   • DNS (UDP + TCP)         → questions, A/AAAA/CNAME, length prefix, loops
+//   • IP edges                → fragments (described, not reassembled),
+//                               IPv6 extension-header chains, bad ethertype
+//   • hostile input           → truncation, wrong version, checksum lies
+//   • TCP payload metadata    → TLS ClientHello SNI (metadata only — no crypto)
+//   • non-IP traffic          → ARP stays on the L2 path (Finding A territory)
+// ─────────────────────────────────────────────────────────────────────────────
 
-import test from "node:test";
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { decodePacket, flowIdOf, canonicalFlow } from "../src/engine/decoder.ts";
 import type { DecodedPacket } from "../src/engine/decoder.ts";
+
+// ── inline fixture builders (bytes-on-the-wire made readable) ───────────────
 
 function mac(sep: string): Buffer {
   const b = Buffer.alloc(6);
@@ -16,7 +33,14 @@ function hex(s: string): Buffer {
   return Buffer.from(s.replace(/\s+/g, ""), "hex");
 }
 
-function eth(payload: Buffer, ethertype = 0x0800, dst = "020203040506", src = "020203040507", vlans: number[] = []): Buffer {
+/** Ethernet II frame, optionally VLAN-tagged (802.1Q stacked outer→inner). */
+function eth(
+  payload: Buffer,
+  ethertype = 0x0800,
+  dst = "020203040506",
+  src = "020203040507",
+  vlans: number[] = [],
+): Buffer {
   const parts: Buffer[] = [mac(dst), mac(src)];
   for (const _ of vlans) {
     parts.push(hex("8100"));
@@ -30,6 +54,7 @@ function eth(payload: Buffer, ethertype = 0x0800, dst = "020203040506", src = "0
   return Buffer.concat(parts);
 }
 
+/** IPv4 header with valid checksum unless asked to lie. */
 function ip4(
   src: string,
   dst: string,
@@ -89,6 +114,7 @@ function udp(sport: number, dport: number, payload: Buffer): Buffer {
   return b;
 }
 
+/** DNS message: header + questions + answers (answers point of offset 12). */
 function dnsMessage(
   id: number,
   isResponse: boolean,
@@ -127,247 +153,280 @@ function dnsMessage(
   return Buffer.concat(parts);
 }
 
-test("ethernet IPv4 TCP: full decode + flow normalization", () => {
-  const frame = eth(
-    ip4("10.66.52.167", "104.20.26.136", 6, tcp(65123, 443, 0x02)),
-  );
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.framing, "ethernet");
-  assert.equal(r.ethertype, 0x0800);
-  assert.equal(r.ip?.version, 4);
-  assert.equal(r.ip?.src, "10.66.52.167");
-  assert.equal(r.ip?.dst, "104.20.26.136");
-  assert.equal(r.ip?.checksumValid, true);
-  assert.equal(r.transport?.kind, "tcp");
-  assert.equal(r.transport?.sport, 65123);
-  assert.equal(r.transport?.dport, 443);
-  assert.equal(r.transport?.tcpFlags, 0x02);
-  assert.ok(r.errors.length === 0, JSON.stringify(r.errors));
-  const f = flowIdOf(r);
-  assert.equal(f, "p6 104.20.26.136:443 <--> 10.66.52.167:65123");
-  // Reversed direction maps to the same flow id.
-  const back = decodePacket(1, eth(ip4("104.20.26.136", "10.66.52.167", 6, tcp(443, 65123, 0x10))), 100);
-  assert.equal(flowIdOf(back), f);
-});
+// ── suites ───────────────────────────────────────────────────────────────────
 
-test("double VLAN tag decoded, both ids recorded", () => {
-  const frame = eth(ip4("10.0.0.1", "10.0.0.2", 17, udp(123, 456, Buffer.from([1, 2]))), 0x0800, "020203040506", "020203040507", [200, 300]);
-  const r = decodePacket(1, frame, frame.length);
-  assert.deepEqual(r.vlanIds, [200, 300]);
-  assert.equal(r.framing, "vlan");
-  assert.equal(r.transport?.sport, 123);
-  const rev = canonicalFlow(17, "10.0.0.1", 123, "10.0.0.2", 456);
-  assert.equal(rev.aip === "10.0.0.1", true);
-});
+describe("decodePacket: ethernet framing", () => {
+  it("decodes Ethernet→IPv4→TCP fully and normalizes the flow id (direction-independent)", () => {
+    const frame = eth(
+      ip4("10.66.52.167", "104.20.26.136", 6, tcp(65123, 443, 0x02)),
+    );
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.framing).toBe("ethernet");
+    expect(r.ethertype).toBe(0x0800);
+    // IP layer parsed with a VALID header checksum
+    expect(r.ip?.version).toBe(4);
+    expect(r.ip?.src).toBe("10.66.52.167");
+    expect(r.ip?.dst).toBe("104.20.26.136");
+    expect(r.ip?.checksumValid).toBe(true);
+    // L4 layer: SYN flag reaches the story
+    expect(r.transport?.kind).toBe("tcp");
+    expect(r.transport?.sport).toBe(65123);
+    expect(r.transport?.dport).toBe(443);
+    expect(r.transport?.tcpFlags).toBe(0x02);
+    expect(r.errors).toHaveLength(0);
+    // The canonical flow id puts the LOWER ip/port endpoint first…
+    expect(flowIdOf(r)).toBe("p6 104.20.26.136:443 <--> 10.66.52.167:65123");
+    // …and the reverse direction MUST map to the exact same flow id.
+    const back = decodePacket(1, eth(ip4("104.20.26.136", "10.66.52.167", 6, tcp(443, 65123, 0x10))), 100);
+    expect(flowIdOf(back)).toBe(flowIdOf(r));
+  });
 
-test("DNS over UDP: questions + A + AAAA + CNAME via pointer", () => {
-  const msg = dnsMessage(0x2ccb, false, [{ name: "example.org", type: 255 }], [
-    { type: 5, data: Buffer.concat([Buffer.from([3]), Buffer.from("www"), Buffer.from([3]), Buffer.from("org"), Buffer.from([0])]) },
-    { type: 1, data: Buffer.from([93, 184, 215, 14]) },
-    { type: 28, data: hex("2606470090d66c5ea14256e5252b85fe") },
-  ]);
-  const frame = eth(ip4("10.66.52.167", "10.66.52.203", 17, udp(56850, 53, msg)));
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.dns?.transactionId, 0x2ccb);
-  assert.equal(r.dns?.isResponse, false);
-  assert.deepEqual(r.dns?.questions[0], { name: "example.org", type: 255 });
-  assert.equal(r.dns?.aRecords[0], "93.184.215.14");
-  assert.equal(r.dns?.aaaaRecords[0], "2606:4700:90d6:6c5e:a142:56e5:252b:85fe");
-});
+  it("decodes a double VLAN tag and records both VLAN ids", () => {
+    const frame = eth(
+      ip4("10.0.0.1", "10.0.0.2", 17, udp(123, 456, Buffer.from([1, 2]))),
+      0x0800,
+      "020203040506",
+      "020203040507",
+      [200, 300],
+    );
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.framing).toBe("vlan");
+    expect(r.vlanIds).toEqual([200, 300]);
+    // L4 decode must succeed THROUGH both tags, not stop at the first one.
+    expect(r.transport?.sport).toBe(123);
+    // Canonical endpoint order: lower IP first.
+    const rev = canonicalFlow(17, "10.0.0.1", 123, "10.0.0.2", 456);
+    expect(rev.aip).toBe("10.0.0.1");
+  });
 
-test("IPv4 fragments: MF + offset fields recorded (no reassembly)", () => {
-  const f1 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(40), { flagsFrag: 0x2001, id: 7 })), 100);
-  assert.equal(f1.ip?.fragment?.moreFragments, true);
-  assert.equal(f1.ip?.fragment?.offsetBytes, 8);
-  assert.equal(f1.ip?.fragment?.id, 7);
-  const f2 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(30), { flagsFrag: 62, id: 7 })), 100);
-  assert.equal(f2.ip?.fragment?.moreFragments, false);
-  assert.equal(f2.ip?.fragment?.offsetBytes, 8 * 62);
-});
-
-test("IPv6 hop-by-hop extension header chain then TCP", () => {
-  const versionTraffic = Buffer.alloc(40 + 8 + 20);
-  versionTraffic[0] = 0x60;
-  versionTraffic.writeUInt16BE(8 + 20, 4); // payload
-  versionTraffic[6] = 0; // next = hop-by-hop
-  versionTraffic[7] = 60;
-  // hop-by-hop at 40: NH=6, ext len byte = 0 => 8 bytes
-  versionTraffic[40] = 6;
-  versionTraffic[41] = 0;
-  for (let i = 48; i < 48 + 20; i++) versionTraffic[i] = 0;
-  versionTraffic.writeUInt16BE(65123, 48);
-  versionTraffic.writeUInt16BE(443, 50);
-  versionTraffic[48 + 12] = 0x50; // TCP data offset 20
-  versionTraffic[48 + 13] = 0x02; // SYN flag
-  const frame = Buffer.concat([eth(versionTraffic, 0x86dd)]);
-  const p = decodePacket(1, frame, frame.length);
-  assert.equal(p.ip?.version, 6);
-  assert.equal(p.ip?.proto, 6);
-  assert.equal(p.ip?.extHeaders?.[0].type, 0);
-  assert.equal(p.transport?.sport, 65123);
-  assert.ok(p.errors.length === 0, JSON.stringify(p.errors));
-});
-
-test("IPv6 fragment header described but not reassembled", () => {
-  const b = Buffer.alloc(40 + 8 + 20);
-  b[0] = 0x60;
-  b.writeUInt16BE(28, 4);
-  b[6] = 44; // fragment header
-  b[7] = 60;
-  // fragment header at 40: NH=6
-  b[40] = 6;
-  b.writeUInt16BE((0 << 3) | 0, 42); // offset 0, MF=0
-  b.writeUInt32BE(9, 44); // id
-  b.writeUInt16BE(56850, 48);
-  b.writeUInt16BE(53, 50);
-  const frame = eth(b, 0x86dd);
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.ip?.proto, 6);
-  assert.deepEqual(r.ip?.extHeaders?.map((e) => e.type), [44]);
-});
-
-test("malformed inputs: truncated + bad version + checksum corruption", () => {
-  // Truncated IPv4 header (not enough bytes)
-  const t1 = decodePacket(228, Buffer.from([0x45, 0x00, 0x00]), 3);
-  assert.ok(t1.errors.some((e) => e.includes("truncated")), JSON.stringify(t1.errors));
-  // Bad version
-  const t2 = decodePacket(228, Buffer.from([0x35, 0, 0, 0]), 4);
-  assert.ok(t2.errors.length > 0);
-  // Corrupted IPv4 checksum still decodes, flag recorded
-  const bad = eth(ip4("1.1.1.1", "2.2.2.2", 6, tcp(1, 2, 0x10), { corruptChecksum: true }));
-  const t3 = decodePacket(1, bad, bad.length);
-  assert.equal(t3.ip?.checksumValid, false);
-  assert.equal(t3.transport?.kind, "tcp");
-  // Ethernet truncated mid-VLAN
-  const t4 = decodePacket(1, hex("ffffffffffff aaaaaaaaaaaa 8100 00"), 10);
-  assert.ok(t4.errors.length > 0);
-});
-
-test("DNS label pointer loop terminates (bounded)", () => {
-  // name begins with pointer to itself; decoder must not hang.
-  const msg = Buffer.alloc(20);
-  msg.writeUInt16BE(1, 0);
-  msg.writeUInt16BE(1, 4); // 1 question
-  msg.writeUInt16BE(0x0001, 5); // low byte reveals nothing; buffer now has question at 12
-  msg[12] = 0xc0;
-  msg[13] = 0x0c; // pointer to itself (12)
-  const frame = eth(ip4("1.1.1.1", "2.2.2.2", 17, udp(53, 5000, msg)));
-  const r = decodePacket(1, frame, frame.length);
-  assert.ok(r.dns === null || r.dns !== undefined);
-});
-
-test("bare-IP framing decoded (no Ethernet header)", () => {
-  const b = ip4("10.66.52.167", "104.20.26.136", 6, tcp(1, 2, 0x10));
-  const r = decodePacket(1, b, b.length);
-  assert.equal(r.framing, "bareIP");
-  assert.equal(r.transport?.kind, "tcp");
-  const r2 = decodePacket(228, b, b.length);
-  assert.equal(r2.framing, "bareIP");
-});
-
-test("raw 802.11 variant with LLC/SNAP decoded (QoS craft, offset 26)", () => {
-  const l2 = Buffer.alloc(26);
-  l2[0] = 0x08;
-  l2[1] = 0x01; // FC: data, to-DS
-  l2.writeUInt16BE(0x0080, 2); // duration
-  mac("0e90588896a5").copy(l2, 4);
-  mac("84144dba8f79").copy(l2, 10);
-  mac("0e90588896a5").copy(l2, 16);
-  l2.writeUInt16BE(0x0000, 22); // seq control
-  l2.writeUInt16BE(0x0000, 24); // QoS control
-  const llc = hex("aaaa 0300 0000 0800");
-  const frame = Buffer.concat([l2, llc, ip4("10.66.52.167", "10.66.52.203", 17, udp(51324, 53, dnsMessage(7, true, [], [])))]);
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.framing, "raw80211");
-  assert.equal(r.transport?.kind, "udp");
-  assert.equal(r.transport?.dport, 53);
-  assert.equal(r.dns?.isResponse, true);
-});
-
-test("unknown ethertype with IP payload: recovered with recorded error", () => {
-  const b = eth(ip4("9.9.9.9", "8.8.8.8", 6, tcp(1, 2, 0x18)), 0x9999);
-  const r = decodePacket(1, b, b.length);
-  assert.ok(r.errors.some((e) => e.includes("0x9999")));
-  assert.equal(r.ip?.src, "9.9.9.9");
-  assert.equal(r.transport?.sport, 1);
-});
-
-test("DNS over TCP: length prefix skipped", () => {
-  const msg = dnsMessage(0xbeef, false, [{ name: "example.com", type: 1 }], []);
-  const prefix = Buffer.alloc(2);
-  prefix.writeUInt16BE(msg.length, 0);
-  const frame = eth(ip4("10.0.0.1", "2.2.2.2", 6, tcp(5000, 53, 0x18, Buffer.concat([prefix, msg]))));
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.dns?.transactionId, 0xbeef);
-  assert.equal(r.dns?.questions[0].name, "example.com");
-});
-
-test("TLS ClientHello SNI extracted (metadata only)", () => {
-  // Minimal ClientHello: record(0x16,0301,len) + handshake(01,len,0303,random32,
-  // sessionid-len, ciphers-len, compression-len, extensions with SNI ext)
-  const host = "example.org";
-  const sniEntry = Buffer.concat([
-    Buffer.from([0x00, 0x00]), // sni ext type
-    Buffer.alloc(0), // placeholder len, patched below
-  ]);
-  const hostBytes = Buffer.from(host, "ascii");
-  const sniList = Buffer.concat([
-    Buffer.alloc(2), // list len patched below
-    Buffer.from([0x00]), // entry type 0
-    (() => { const b = Buffer.alloc(2); b.writeUInt16BE(hostBytes.length, 0); return b; })(),
-    hostBytes,
-  ]);
-  sniList.writeUInt16BE(sniList.length - 2, 0);
-  sniEntry[2] = 0x00; // patched per construct
-  void sniEntry;
-  const sniExt = Buffer.concat([
-    Buffer.from([0x00, 0x00]),
-    (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniList.length, 0); return b; })(),
-    sniList,
-  ]);
-  const body = Buffer.concat([
-    Buffer.from([0x03, 0x03]), // legacy version
-    Buffer.alloc(32), // random
-    Buffer.from([0x00]), // session id empty
-    Buffer.from([0x00, 0x02, 0x13, 0x01]), // one cipher suite
-    Buffer.from([0x01, 0x00]), // compression empty
-    (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniExt.length, 0); return b; })(),
-    sniExt,
-  ]);
-  const hsLen = Buffer.alloc(4);
-  hsLen[0] = 0x01;
-  hsLen.writeUIntBE(body.length, 1, 3);
-  const hsBody = Buffer.concat([hsLen, body]);
-  const recHeader = Buffer.alloc(5);
-  recHeader[0] = 0x16;
-  recHeader[1] = 0x03; recHeader[2] = 0x01;
-  recHeader.writeUInt16BE(hsBody.length, 3);
-  const tls = Buffer.concat([recHeader, hsBody]);
-  const frame = eth(ip4("10.0.0.10", "1.2.3.4", 6, tcp(50000, 443, 0x18, tls)));
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal((r.transport?.payloadLen ?? 0) > 0, true);
-  assert.equal(r.tls?.recordVersion, "0301");
-  assert.equal(r.tls?.legacyVersion, "0303");
-  assert.equal(r.tls?.sni, "example.org");
-});
-
-test("ARP described as arp kind", () => {
-  const arp = hex("0001 0800 06 04 0001 aabbccddeeff c0a80119 000000000000 c0a80101");
-  const frame = Buffer.concat([eth(arp, 0x0806)]);
-  const r = decodePacket(1, frame, frame.length);
-  assert.equal(r.transport?.kind, "arp");
-  assert.equal(r.ip, undefined);
-});
-
-test("empty and short inputs never throw", () => {
-  for (const b of [Buffer.alloc(0), Buffer.alloc(3), Buffer.from([0x08, 0x01])]) {
+  it("decodes bare-IP framing when there is no Ethernet header (linktype 1 or 228)", () => {
+    const b = ip4("10.66.52.167", "104.20.26.136", 6, tcp(1, 2, 0x10));
     const r = decodePacket(1, b, b.length);
-    assert.ok(Array.isArray(r.errors));
-  }
+    expect(r.framing).toBe("bareIP");
+    expect(r.transport?.kind).toBe("tcp");
+    // linktype 228 (IPV4 raw) takes the same path.
+    const r2 = decodePacket(228, b, b.length);
+    expect(r2.framing).toBe("bareIP");
+  });
+
+  it("decodes raw 802.11 QoS frames (LLC/SNAP payload starts at offset 26)", () => {
+    const l2 = Buffer.alloc(26);
+    l2[0] = 0x08;
+    l2[1] = 0x01; // FC: data, to-DS
+    l2.writeUInt16BE(0x0080, 2); // duration
+    mac("0e90588896a5").copy(l2, 4);
+    mac("84144dba8f79").copy(l2, 10);
+    mac("0e90588896a5").copy(l2, 16);
+    l2.writeUInt16BE(0x0000, 22); // seq control
+    l2.writeUInt16BE(0x0000, 24); // QoS control
+    const llc = hex("aaaa 0300 0000 0800"); // LLC/SNAP → ethertype 0x0800
+    const frame = Buffer.concat([
+      l2,
+      llc,
+      ip4("10.66.52.167", "10.66.52.203", 17, udp(51324, 53, dnsMessage(7, true, [], []))),
+    ]);
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.framing).toBe("raw80211");
+    expect(r.transport?.kind).toBe("udp");
+    expect(r.transport?.dport).toBe(53);
+    expect(r.dns?.isResponse).toBe(true);
+  });
 });
 
-test("DecodedPacket shape sanity", () => {
-  const r: DecodedPacket = decodePacket(1, Buffer.from([0, 1]), 2);
-  assert.equal(typeof r.capLen, "number");
-  assert.equal(r.framing, "unknown");
+describe("decodePacket: DNS parsing", () => {
+  it("extracts questions + A + AAAA + CNAME (via compression pointer) over UDP", () => {
+    const msg = dnsMessage(0x2ccb, false, [{ name: "example.org", type: 255 }], [
+      // CNAME: pointer-free name "www.org"
+      { type: 5, data: Buffer.concat([Buffer.from([3]), Buffer.from("www"), Buffer.from([3]), Buffer.from("org"), Buffer.from([0])]) },
+      { type: 1, data: Buffer.from([93, 184, 215, 14]) },
+      { type: 28, data: hex("2606470090d66c5ea14256e5252b85fe") },
+    ]);
+    const frame = eth(ip4("10.66.52.167", "10.66.52.203", 17, udp(56850, 53, msg)));
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.dns?.transactionId).toBe(0x2ccb);
+    expect(r.dns?.isResponse).toBe(false);
+    expect(r.dns?.questions[0]).toEqual({ name: "example.org", type: 255 });
+    expect(r.dns?.aRecords[0]).toBe("93.184.215.14");
+    expect(r.dns?.aaaaRecords[0]).toBe("2606:4700:90d6:6c5e:a142:56e5:252b:85fe");
+  });
+
+  it("parses DNS carried inside TCP by skipping the 2-byte length prefix", () => {
+    const msg = dnsMessage(0xbeef, false, [{ name: "example.com", type: 1 }], []);
+    const prefix = Buffer.alloc(2);
+    prefix.writeUInt16BE(msg.length, 0);
+    const frame = eth(ip4("10.0.0.1", "2.2.2.2", 6, tcp(5000, 53, 0x18, Buffer.concat([prefix, msg]))));
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.dns?.transactionId).toBe(0xbeef);
+    expect(r.dns?.questions[0].name).toBe("example.com");
+  });
+
+  it("terminates on a self-referencing DNS label pointer instead of hanging", () => {
+    // name begins with pointer to itself; decoder must not hang.
+    const msg = Buffer.alloc(20);
+    msg.writeUInt16BE(1, 0);
+    msg.writeUInt16BE(1, 4); // 1 question
+    msg.writeUInt16BE(0x0001, 5);
+    msg[12] = 0xc0;
+    msg[13] = 0x0c; // pointer to itself (offset 12)
+    const frame = eth(ip4("1.1.1.1", "2.2.2.2", 17, udp(53, 5000, msg)));
+    const r = decodePacket(1, frame, frame.length);
+    // Either gives up cleanly (null) or yields a parsed-but-empty result —
+    // anything but a hang/infinite recursion passes.
+    expect(r.dns === null || r.dns !== undefined).toBe(true);
+  });
+});
+
+describe("decodePacket: IP-layer edge cases", () => {
+  it("records IPv4 fragment fields (MF bit + offset) but never fakes reassembly", () => {
+    const f1 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(40), { flagsFrag: 0x2001, id: 7 })), 100);
+    expect(f1.ip?.fragment?.moreFragments).toBe(true);
+    expect(f1.ip?.fragment?.offsetBytes).toBe(8); // raw frag field 1 → 8 bytes
+    expect(f1.ip?.fragment?.id).toBe(7);
+    const f2 = decodePacket(1, eth(ip4("1.1.1.1", "2.2.2.2", 17, Buffer.alloc(30), { flagsFrag: 62, id: 7 })), 100);
+    expect(f2.ip?.fragment?.moreFragments).toBe(false);
+    expect(f2.ip?.fragment?.offsetBytes).toBe(8 * 62);
+  });
+
+  it("walks the IPv6 hop-by-hop extension-header chain and still decodes TCP", () => {
+    const versionTraffic = Buffer.alloc(40 + 8 + 20);
+    versionTraffic[0] = 0x60;
+    versionTraffic.writeUInt16BE(8 + 20, 4); // payload length
+    versionTraffic[6] = 0; // next header = hop-by-hop
+    versionTraffic[7] = 60; // hop limit
+    // hop-by-hop ext at offset 40: NH=6 (TCP), ext-len byte 0 → 8 bytes
+    versionTraffic[40] = 6;
+    versionTraffic[41] = 0;
+    for (let i = 48; i < 48 + 20; i++) versionTraffic[i] = 0;
+    versionTraffic.writeUInt16BE(65123, 48);
+    versionTraffic.writeUInt16BE(443, 50);
+    versionTraffic[48 + 12] = 0x50; // TCP data offset 20
+    versionTraffic[48 + 13] = 0x02; // SYN
+    const frame = Buffer.concat([eth(versionTraffic, 0x86dd)]);
+    const p = decodePacket(1, frame, frame.length);
+    expect(p.ip?.version).toBe(6);
+    expect(p.ip?.proto).toBe(6);
+    expect(p.ip?.extHeaders?.[0].type).toBe(0); // hop-by-hop
+    expect(p.transport?.sport).toBe(65123); // decoded THROUGH the ext chain
+    expect(p.errors).toHaveLength(0);
+  });
+
+  it("describes the IPv6 fragment header without reassembling (M3 scope)", () => {
+    const b = Buffer.alloc(40 + 8 + 20);
+    b[0] = 0x60;
+    b.writeUInt16BE(28, 4);
+    b[6] = 44; // next header = fragment
+    b[7] = 60;
+    b[40] = 6; // fragment ext: NH = TCP
+    b.writeUInt16BE((0 << 3) | 0, 42); // offset 0, MF=0
+    b.writeUInt32BE(9, 44); // fragment id
+    b.writeUInt16BE(56850, 48);
+    b.writeUInt16BE(53, 50);
+    const frame = eth(b, 0x86dd);
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.ip?.proto).toBe(6);
+    expect(r.ip?.extHeaders?.map((e) => e.type)).toEqual([44]);
+  });
+
+  it("recovers packets with an unknown ethertype that still carry IP, recording the oddity", () => {
+    const b = eth(ip4("9.9.9.9", "8.8.8.8", 6, tcp(1, 2, 0x18)), 0x9999);
+    const r = decodePacket(1, b, b.length);
+    expect(r.errors).toEqual(expect.arrayContaining([expect.stringContaining("0x9999")]));
+    // Recovery is real: the inner IP+TCP still parse.
+    expect(r.ip?.src).toBe("9.9.9.9");
+    expect(r.transport?.sport).toBe(1);
+  });
+});
+
+describe("decodePacket: hostile and malformed input", () => {
+  it("reports truncated headers, bad IP versions, corrupt checksums, mid-VLAN cuts", () => {
+    // 1. Truncated IPv4 header: must say so, not throw.
+    const t1 = decodePacket(228, Buffer.from([0x45, 0x00, 0x00]), 3);
+    expect(t1.errors).toEqual(expect.arrayContaining([expect.stringContaining("truncated")]));
+
+    // 2. Bad version nibble (0x35 → version 3): errors, no crash.
+    const t2 = decodePacket(228, Buffer.from([0x35, 0, 0, 0]), 4);
+    expect(t2.errors.length).toBeGreaterThan(0);
+
+    // 3. Corrupt IPv4 checksum: still decodes, and the corruption is
+    //    RECORDED, not hidden.
+    const bad = eth(ip4("1.1.1.1", "2.2.2.2", 6, tcp(1, 2, 0x10), { corruptChecksum: true }));
+    const t3 = decodePacket(1, bad, bad.length);
+    expect(t3.ip?.checksumValid).toBe(false);
+    expect(t3.transport?.kind).toBe("tcp");
+
+    // 4. Ethernet truncated in the middle of a VLAN tag.
+    const t4 = decodePacket(1, hex("ffffffffffff aaaaaaaaaaaa 8100 00"), 10);
+    expect(t4.errors.length).toBeGreaterThan(0);
+  });
+
+  it("never throws on empty or 1–3 byte inputs", () => {
+    for (const b of [Buffer.alloc(0), Buffer.alloc(3), Buffer.from([0x08, 0x01])]) {
+      const r = decodePacket(1, b, b.length);
+      // Contract: errors is always an array (never a throw path).
+      expect(Array.isArray(r.errors)).toBe(true);
+    }
+  });
+
+  it("returns the documented DecodedPacket shape even for garbage", () => {
+    const r: DecodedPacket = decodePacket(1, Buffer.from([0, 1]), 2);
+    expect(typeof r.capLen).toBe("number");
+    expect(r.framing).toBe("unknown");
+  });
+});
+
+describe("decodePacket: TCP payload metadata (no decryption ever)", () => {
+  it("extracts SNI from a minimal TLS ClientHello — record version, legacy version, hostname", () => {
+    // Hand-assembled ClientHello: record(0x16,0301,len) + handshake(01,len,
+    // 0303, random32, session-id, cipher, compression, SNI extension).
+    const host = "example.org";
+    const hostBytes = Buffer.from(host, "ascii");
+    const sniList = Buffer.concat([
+      Buffer.alloc(2), // list length, patched below
+      Buffer.from([0x00]), // entry type 0 = hostname
+      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(hostBytes.length, 0); return b; })(),
+      hostBytes,
+    ]);
+    sniList.writeUInt16BE(sniList.length - 2, 0);
+    const sniExt = Buffer.concat([
+      Buffer.from([0x00, 0x00]), // extension type = server_name
+      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniList.length, 0); return b; })(),
+      sniList,
+    ]);
+    const body = Buffer.concat([
+      Buffer.from([0x03, 0x03]), // legacy version
+      Buffer.alloc(32), // random
+      Buffer.from([0x00]), // empty session id
+      Buffer.from([0x00, 0x02, 0x13, 0x01]), // one cipher suite (TLS_AES_128_GCM)
+      Buffer.from([0x01, 0x00]), // compression: null
+      (() => { const b = Buffer.alloc(2); b.writeUInt16BE(sniExt.length, 0); return b; })(),
+      sniExt,
+    ]);
+    const hsLen = Buffer.alloc(4);
+    hsLen[0] = 0x01;
+    hsLen.writeUIntBE(body.length, 1, 3);
+    const hsBody = Buffer.concat([hsLen, body]);
+    const recHeader = Buffer.alloc(5);
+    recHeader[0] = 0x16; // handshake record
+    recHeader[1] = 0x03; recHeader[2] = 0x01; // TLS 1.0 record layer
+    recHeader.writeUInt16BE(hsBody.length, 3);
+    const tls = Buffer.concat([recHeader, hsBody]);
+    const frame = eth(ip4("10.0.0.10", "1.2.3.4", 6, tcp(50000, 443, 0x18, tls)));
+
+    const r = decodePacket(1, frame, frame.length);
+    expect((r.transport?.payloadLen ?? 0)).toBeGreaterThan(0);
+    expect(r.tls?.recordVersion).toBe("0301");
+    expect(r.tls?.legacyVersion).toBe("0303");
+    expect(r.tls?.sni).toBe("example.org");
+    // NOTE: only METADATA is read — keys/payload are never decrypted (project rule).
+  });
+});
+
+describe("decodePacket: non-IP traffic", () => {
+  it("routes ARP to the arp kind and touches no IP decoder", () => {
+    const arp = hex("0001 0800 06 04 0001 aabbccddeeff c0a80119 000000000000 c0a80101");
+    const frame = Buffer.concat([eth(arp, 0x0806)]);
+    const r = decodePacket(1, frame, frame.length);
+    expect(r.transport?.kind).toBe("arp");
+    expect(r.ip).toBeUndefined();
+  });
 });
