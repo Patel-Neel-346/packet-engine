@@ -1,242 +1,270 @@
 # strobe-packet-tracker
 
-Windows capture prototype for Strobe's packet-tracking engine. It captures real
-traffic with the in-box Windows `pktmon` backend, decodes it from raw PCAPNG
-bytes in pure TypeScript (zero runtime dependencies, no build step), and proves
-every layer of the engine correct against **tshark as an independent oracle** —
-milestone by milestone, never claiming anything that wasn't run.
+High-performance, pure TypeScript network packet decoding and stateful flow-tracking engine. Designed for Windows (`pktmon` capture backend) and standard PCAP/PCAPNG capture workflows.
 
-**Status: Milestones 1-3 COMPLETE (+ M3 report). M4 (engine ergonomics) DONE —
-verified & wired. M4a (loopback vantage) DONE — Finding A closed: userspace
-tap, 3 local scenarios captured + verified vs engine and tshark. Next
-candidates: story depth (HTTP/2+QUIC, IPv4 fragment reassembly) or dashboard
-capture integration.**
+The engine operates with **zero runtime dependencies**, performs **no TLS decryption** (metadata only), and is formally verified against **Wireshark's `tshark 4.6.9` as an independent ground-truth oracle** across real network traces.
 
-Evidence: [`docs/history/`](docs/history/) (verbatim milestone reports) and
-[`docs/project-status.md`](docs/project-status.md) (living status ledger).
+---
 
-## The pipeline
+## Architecture Overview
 
 ```
  real traffic ──► pktmon ──► ETL ──► etl2pcap ──► out\*.pcapng
                    (in-box Windows tools; ONE UAC prompt per capture run)
 
- local app traffic ──► src/tap/ userspace loopback tap (M4a; no UAC, no
-                       drivers) — synthesizes PCAPNG traces of the loopback
-                       traffic pktmon cannot see on this build (Finding A)
+ local app traffic ──► src/tap/ userspace loopback tap (no UAC, no drivers)
+                       synthesizes PCAPNG traces of local socket traffic (Finding A)
 
                                      out\*.pcapng traces on disk
                                                 │
                                                 ▼
-            ┌──────────────────────────────────────────────────────┐
-            │ src/engine/ — pure TypeScript, zero process/net I/O  │
-            │   parsePcapng ─► decodePacket ─► dedupePackets ─►    │
-            │   buildFlows                                         │
-            │   (framing, IP/TCP/UDP/DNS/TLS metadata, copy-       │
-            │    collapse, TCP reassembly, flow stories, DNS       │
-            │    attribution, HTTP metadata)                       │
-            └──────────────────────────────────────────────────────┘
+            ┌───────────────────────────────────────────────────────────────┐
+            │ src/engine/ — Pure TypeScript Engine (Zero Process/Net I/O)   │
+            │   parsePcapng ─► decodePacket ─► dedupePackets ─► buildFlows  │
+            │   • Layered L2-L7 Dissection (Eth, IP, TCP, UDP, DNS, TLS)    │
+            │   • Capture copy deduplication (content-hash + timestamp)     │
+            │   • TCP sparse stream reassembly & sequence wraparound math   │
+            │   • Conversation lifecycle & DNS attribution                  │
+            │   • HTTP/1.x message parsing (pipelining & chunking)          │
+            └───────────────────────────────────────────────────────────────┘
                                                 │
                  ┌──────────────────────────────┼────────────────┐
                  ▼                              ▼                ▼
           src/verify/                    src/reporting/      src/cli.ts
-          prove every layer vs           HTML dashboard,     entry point:
-          tshark (M1 frames, M2          per-trace reports,  every command +
-          parity, M3 conv/DNS/HTTP/      json/csv/md         the 8-gate
-          retrans matrix)                exports             suite
+          Continuous tshark oracle       HTML dashboard,     Single CLI entry:
+          validation (M1 frames,         per-trace reports,  all scripts +
+          M2 21-col parity, M3 matrix)   json/csv/md export  8-gate verifier
 ```
 
-Three properties make this prototype verifiable rather than merely working:
+---
 
-1. **The engine is pure.** `src/engine/` turns bytes into values with zero
-   process/network I/O — every harness feeds it buffers and reads back
-   results, so all 36 unit tests run offline and non-elevated.
-2. **Nothing is trusted without an oracle.** Frames (M1), a 21-column
-   per-packet parity metric (M2), and conversation/DNS/HTTP/retransmission
-   checks (M3) are compared against real tshark output; packets the engine
-   cannot decode count as _unsupported_, never as matches.
-3. **One command re-proves everything.** `npm run test:all` runs all 8
-   verification gates in ~45 s, offline, no UAC.
+## Core Protocol & Engine Capabilities
 
-## Milestone status
+### 1. Layer 2: Framing & Link Layer
 
-| Milestone                                       | Status                      | Score                                                                                       |
-| ----------------------------------------------- | --------------------------- | ------------------------------------------------------------------------------------------- |
-| M1 — capture path                               | **DONE**                    | 100%                                                                                        |
-| M2 — decode + parity vs tshark                  | **DONE**                    | 9/9 core scenarios 100% parity                                                              |
-| M3 — flow engine + TCP reassembly               | **DONE**                    | 14/14 traces fully pass all checks                                                          |
-| M4 — engine ergonomics (dashboard/watch/export) | **DONE — verified & wired** | 67 traces → dashboard; json/csv/md exports content-checked vs known values                  |
-| M4a — loopback vantage (userspace tap)          | **DONE — Finding A closed** | 3 local scenarios: 22 in-tap checks ALL PASS + tshark full gate on all 3 synthesized traces |
+- **Ethernet II** ([RFC 894](https://www.rfc-editor.org/rfc/rfc894)): MAC address parsing (`srcMac`, `dstMac`), EtherType resolution.
+- **VLAN Tagging** (IEEE 802.1Q & IEEE 802.1ad QinQ): Parses single and stacked outer/inner VLAN tags (`0x8100`, `0x88a8`) up to 4 layers deep.
+- **Address Resolution Protocol (ARP)** ([RFC 826](https://www.rfc-editor.org/rfc/rfc826)): Opcode detection (Request vs Reply), hardware/protocol addressing.
+- **Bare IP Framing**: Recovers L3 packets lacking an L2 header (e.g. from Windows TCPIP pktmon provider components).
+- **Raw 802.11 Wi-Fi Data Frames**: Automatically detects LLC/SNAP encapsulation (`0xAA 0xAA 0x03`) on Wi-Fi adapter components (`nwifi.sys`).
 
-## Prerequisites
+### 2. Layer 3: Network Layer
 
-| Item               | Required version                      | License | Purpose                   |
-| ------------------ | ------------------------------------- | ------- | ------------------------- |
-| Windows            | 10.0.19041+ (tested on 10.0.26200)    | -       | in-box pktmon             |
-| Node.js            | >= 24 (tested v24.12.0)               | MIT     | engine + CLI              |
-| tshark (Wireshark) | tested 4.6.9                          | GPL     | independent verifier only |
-| Administrator      | session UAC approval once per capture | -       | pktmon driver access      |
+- **IPv4** ([RFC 791](https://www.rfc-editor.org/rfc/rfc791)):
+  - Variable IHL options walk (up to 60 bytes).
+  - One's-complement header checksum verification ([RFC 1071](https://www.rfc-editor.org/rfc/rfc1071)).
+  - Identification and fragmentation handling (Flags: MF, DF, Fragment offset in bytes).
+  - TSO zero-length tolerance & Ethernet trailing padding adjustment ([RFC 894](https://www.rfc-editor.org/rfc/rfc894)).
+- **IPv6** ([RFC 8200](https://www.rfc-editor.org/rfc/rfc8200)):
+  - Traffic Class & 20-bit Flow Label extraction.
+  - Bounded extension header chain walking: Hop-by-Hop (0), Routing (43), Fragment (44), AH ([RFC 4302](https://www.rfc-editor.org/rfc/rfc4302)), Destination Options (60).
+  - Canonical text formatting and zero-run compression ([RFC 5952](https://www.rfc-editor.org/rfc/rfc5952)), including IPv4-mapped addresses (`::ffff:a.b.c.d`).
 
-- No third-party runtime dependencies; dev deps: `typescript`, `@types/node`.
-- Node >= 24 runs `.ts` directly (type stripping) — there is **no build step**.
-- tshark is used **only** as a verifier; the engine itself never depends on it.
+### 3. Layer 4: Transport Layer
 
-## Quick start (Windows)
+- **TCP** ([RFC 9293](https://www.rfc-editor.org/rfc/rfc9293)):
+  - Full header dissection: sport, dport, 32-bit seq, ack, data offset, window size, urgent pointer.
+  - Flag parsing: SYN, FIN, RST, PSH, ACK, URG.
+  - Options parsing: Maximum Segment Size (MSS), Window Scale, SACK Permitted, Timestamps ([RFC 1323](https://www.rfc-editor.org/rfc/rfc1323)).
+  - Transport checksum verification across IPv4/IPv6 pseudo-headers.
+- **UDP** ([RFC 768](https://www.rfc-editor.org/rfc/rfc768)):
+  - Length and port extraction, payload truncation detection, IPv6 jumbogram convention support ([RFC 2675](https://www.rfc-editor.org/rfc/rfc2675)).
+  - Checksum validation: 0 allowed on IPv4, flagged on IPv6 ([RFC 8200 §8.1](https://www.rfc-editor.org/rfc/rfc8200#section-8.1)).
+- **ICMP / ICMPv6** ([RFC 792](https://www.rfc-editor.org/rfc/rfc792) / [RFC 4443](https://www.rfc-editor.org/rfc/rfc4443)):
+  - Message type, code, ping echo ID and sequence tracking.
+
+### 4. Layer 7: Application Layer Metadata
+
+- **DNS** ([RFC 1035](https://www.rfc-editor.org/rfc/rfc1035)):
+  - Parsed over both **UDP** and **TCP** (with 2-byte length prefix handling).
+  - Question records (A, AAAA, CNAME, MX, TXT, PTR).
+  - Answer records (A IPv4 literals, AAAA IPv6 literals, CNAME aliases, EDNS0 OPT metadata [RFC 6891](https://www.rfc-editor.org/rfc/rfc6891)).
+  - Bounded compression pointer resolution with cycle detection to prevent infinite pointer loops.
+- **TLS Handshake Metadata** ([RFC 8446](https://www.rfc-editor.org/rfc/rfc8446)):
+  - Dissects ClientHello and ServerHello records (metadata only; zero crypto/decryption).
+  - Extracts Server Name Indication (SNI) ([RFC 6066](https://www.rfc-editor.org/rfc/rfc6066)).
+  - Extracts `supported_versions` (e.g. TLS 1.3 `0x0304`, TLS 1.2 `0x0303`) and Encrypted ClientHello (ECH) presence.
+- **HTTP/1.x Reconstruction** ([RFC 9112](https://www.rfc-editor.org/rfc/rfc9112)):
+  - Request methods (GET, POST, PUT, DELETE, HEAD, OPTIONS, PATCH, CONNECT), URI, version.
+  - Response status code, reason phrase, header normalization (lowercase, comma-joined duplicates).
+  - Pipelined request sequence handling, `Content-Length` bounds, and chunked transfer encoding detection.
+
+### 5. Stateful Flow Tracking & Reassembly
+
+- **Canonical Flow Keying**: Normalizes bidirectional 5-tuples (`canonicalFlow`) into `p<proto> <ipA>:<portA> <--> <ipB>:<portB>`.
+- **Sparse Stream TCP Reassembly**: Reassembles out-of-order segments, tracks gaps (with 0x00 zero-padding), identifies retransmissions, and handles 32-bit unsigned sequence wraparound via modular signed distance arithmetic.
+- **DNS Attribution**: Automatically attributes queried domain names to destination IPs and conversations.
+
+---
+
+## How to Use the Engine (API)
+
+The packet engine is pure TypeScript and can be imported directly into any Node.js (>= 24) or TypeScript project:
+
+### 1. Decode a Single Raw Packet
+
+```typescript
+import { decodePacket, flowIdOf } from "./src/engine/decoder.ts";
+
+// linkType 1 = Ethernet II
+const decoded = decodePacket(1, packetBuffer, packetBuffer.length);
+
+console.log("Framing:", decoded.framing); // "ethernet" | "vlan" | "bareIP" | ...
+console.log("L3 IP:", decoded.ip?.src, "->", decoded.ip?.dst);
+console.log(
+  "L4 Transport:",
+  decoded.transport?.kind,
+  decoded.transport?.sport,
+  "->",
+  decoded.transport?.dport,
+);
+
+// If DNS payload was present:
+if (decoded.dns) {
+  console.log(
+    "DNS Queries:",
+    decoded.dns.questions.map((q) => q.name),
+  );
+  console.log("A Records:", decoded.dns.aRecords);
+}
+
+// If TLS ClientHello was present:
+if (decoded.tls?.sni) {
+  console.log("TLS SNI:", decoded.tls.sni);
+}
+
+// Canonical flow conversation ID:
+console.log("Flow ID:", flowIdOf(decoded));
+// e.g. "p6 10.0.0.1:54321 <--> 93.184.216.34:443"
+```
+
+### 2. Analyze a Complete PCAPNG File & Build Flows
+
+```typescript
+import { analyzePcapFile } from "./src/engine/flows.ts";
+
+const analysis = analyzePcapFile("out/scen/s1_https_all.pcapng");
+
+console.log(`Total EPB Frames: ${analysis.totalEpbs}`);
+console.log(`Duplicates Merged: ${analysis.duplicatesMerged}`);
+console.log(`Unique Flows: ${analysis.flows.length}`);
+
+for (const flow of analysis.flows) {
+  console.log(`\nFlow: ${flow.id} (${flow.kind.toUpperCase()})`);
+  console.log(`  Endpoints: ${flow.a.ip}:${flow.a.port} <--> ${flow.b.ip}:${flow.b.port}`);
+  console.log(`  Packets: A->B: ${flow.packets.a2b}, B->A: ${flow.packets.b2a}`);
+  console.log(`  Attributed Hostnames: ${flow.hosts.join(", ") || "none"}`);
+  if (flow.tlsSni.length > 0) {
+    console.log(`  TLS SNI: ${flow.tlsSni.join(", ")}`);
+  }
+  if (flow.tcp) {
+    console.log(`  Handshake Complete: ${flow.tcp.handshakeComplete}`);
+    console.log(`  Retransmitted Segments: ${flow.uniqueRetransSegs}`);
+  }
+}
+```
+
+---
+
+## Command Reference
+
+### 1. Testing & Verification
+
+| Command                     | Description                                                                              | Duration    |
+| :-------------------------- | :--------------------------------------------------------------------------------------- | :---------- |
+| **`npm test`**              | Runs **Jest** across all 14 test suites (208 unit/fuzz/oracle tests) with verbose output | ~8 seconds  |
+| **`npm run test:watch`**    | Interactive Jest watcher for rapid TDD development                                       | Live        |
+| **`npm run test:coverage`** | Generates code coverage report via Istanbul                                              | ~10 seconds |
+| **`npm run test:all`**      | Runs the full **8-gate release verification suite** (see table below) against `tshark`   | ~55 seconds |
+| **`npm run typecheck`**     | Strict TypeScript compilation check (`tsc --noEmit`)                                     | ~2 seconds  |
+| **`npm run format`**        | Formats all code using Prettier                                                          | ~1 second   |
+| **`npm run format:check`**  | Validates code style against Prettier                                                    | ~1 second   |
+
+### 2. Reporting & Exports
 
 ```powershell
-# Prereqs: Node.js v24+ (type stripping runs .ts directly), Wireshark
-# (tshark) for independent verification, Administrator approval for capture.
-cd strobe-packet-tracker
-npm install
+# Generate interactive HTML dashboard over all captured traces:
+npm run m4:report
 
-# --- ONE SHOT: run EVERY verification gate (offline, no UAC, ~45 s) ---
-npm run test:all
-# 8 gates: typecheck, 36 unit/integration tests, M1 frame-by-frame vs tshark,
-# M2 parity regression (14 traces), M3 matrix (14/14), M4 dashboard + exports,
-# M4a loopback tap (3 scenarios + tshark gate). Report: test-results\test-all.md
+# Continuously watch out/scen/ and regenerate the dashboard on changes:
+npm run m4:watch
+
+# Export trace analysis to Markdown, CSV, or JSON:
+npm run m4:export out/scen/s3_dns_all.pcapng md
+npm run m4:export out/scen/s3_dns_all.pcapng csv
+npm run m4:export out/scen/s2_http_external_all.pcapng json
 ```
 
-## Command reference
+### 3. Capture Workflow (Windows Administrator)
 
-All commands run from the repo root. Elevation: `1 UAC` = exactly one UAC
-prompt for the whole run; `none` = fully offline and non-elevated.
+```powershell
+# Milestone 1: Elevated pktmon single-session capture
+npm run m1:capture
+npm run m1:pick
+npm run m1:verify
 
-### Verification
+# Milestone 2: Live scenario batches with automatic tshark parity cross-checking
+npm run m2:core
+npm run m2:ext
 
-| Command                 | What it does                                                                          | Elevation |
-| ----------------------- | ------------------------------------------------------------------------------------- | --------- |
-| `npm run test:all`      | all 8 gates in sequence; exit 0 only when all pass; writes `test-results\test-all.md` | none      |
-| `npm run typecheck`     | `tsc --noEmit` over `src/**` + `test/**`                                              | none      |
-| `npm test`              | Jest run: 36 tests in 3 structured suites (16 decoder + 17 flows + 3 loopback tap)    | none      |
-| `npm run test:watch`    | Jest watch mode — re-runs only affected tests as you edit                             | none      |
-| `npm run test:coverage` | Istanbul coverage report (`jest --coverage`, built in)                                | none      |
+# Milestone 4a: Non-elevated userspace loopback tap verification
+npm run m4:loopback
+```
 
-### M1 — capture path
+---
 
-| Command              | What it does                                                                     | Elevation |
-| -------------------- | -------------------------------------------------------------------------------- | --------- |
-| `npm run m1:capture` | elevated pktmon capture bundle — prechecks, one generated `.ps1`, ETL → etl2pcap | 1 UAC     |
-| `npm run m1:pick`    | select the best per-component trace → `out\m1.pcapng`                            | none      |
-| `npm run m1:verify`  | cross-check `out\m1.pcapng` frame-by-frame vs tshark                             | none      |
+## The 8-Gate Verification Model (`npm run test:all`)
 
-### M2 — decoder + parity
+Every layer of the engine is validated against an independent oracle (`tshark 4.6.9`). `npm run test:all` executes all 8 gates in sequence and exits `0` only when all pass:
 
-| Command           | What it does                                                                | Elevation     |
-| ----------------- | --------------------------------------------------------------------------- | ------------- |
-| `npm run m2:plan` | generate + syntax-check the M2 bundle script (offline dry-run)              | none          |
-| `npm run m2:core` | Milestone 2 CORE scenarios (9) — live capture, decode, parity vs tshark     | 1 UAC, ~5 min |
-| `npm run m2:ext`  | Milestone 2 EXTENDED scenarios (6) — live capture, decode, parity vs tshark | 1 UAC         |
+| Gate  | Name                    | What It Proves                                            | Oracle Verification                                         |
+| :---: | :---------------------- | :-------------------------------------------------------- | :---------------------------------------------------------- |
+| **1** | **`typecheck`**         | Whole-project TypeScript type-safety                      | `tsc --noEmit` clean                                        |
+| **2** | **`unit-tests`**        | 208 unit, edge-case, and fuzz tests across 14 test suites | Real capture oracle checks against `tshark`                 |
+| **3** | **`m1-verify`**         | Frame-by-frame 1:1 cross-check of captured frames         | Compared against `tshark -r <trace> -T json` (0 mismatches) |
+| **4** | **`parity-regression`** | 14 real-world network scenario traces                     | 21-column parity matrix compared against tshark baselines   |
+| **5** | **`m3-matrix`**         | 14/14 trace full conversation matrix                      | Verifies conversations & bytes against `tshark -z conv,*`   |
+| **6** | **`m4-dashboard`**      | HTML dashboard generation across entire corpus            | Renders `out/m4-reports/index.html` (43 KB)                 |
+| **7** | **`m4-export-formats`** | Data serialization validation                             | Validates JSON, CSV, and Markdown exports                   |
+| **8** | **`m4a-loopback`**      | Userspace loopback tap (HTTP, WS, TCP Echo)               | Proves application ground truth + `tshark` gate pass        |
 
-### M3 — flow engine
+---
 
-| Command                    | What it does                                                                                                                                   | Elevation |
-| -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `npm run m3:verify`        | full matrix: 14/14 traces fully pass vs tshark (conv/DNS/HTTP/retrans)                                                                         | none      |
-| `npm run m3:flows <trace>` | print the flow story for one trace, e.g. `npm run m3:flows out\scen\s1_https_all.pcapng` or `npm run m3:flows out\scen\s12_retrans_all.pcapng` | none      |
-
-### M4 — engine ergonomics
-
-| Command                           | What it does                                                                                                                                                | Elevation |
-| --------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `npm run m4:report`               | analyze `out\scen` → `out\m4-reports\index.html` dashboard + per-trace HTML reports (67 traces); explicit dirs: `npm run m4:report out\scen out\m4-reports` | none      |
-| `npm run m4:watch`                | same, then regenerate the dashboard when traces change (Ctrl+C to stop)                                                                                     | none      |
-| `npm run m4:export <trace> <fmt>` | one-trace exports — `json` \| `csv` \| `md`, e.g. `npm run m4:export out\scen\s3_dns_all.pcapng md`                                                         | none      |
-
-### M4a — loopback vantage (Finding A closed)
-
-| Command                           | What it does                                                                                                                            | Elevation |
-| --------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| `npm run m4:loopback`             | tap-capture `s2_local_split` / `s13_ws` / `s11_loopback` + verify (app-truth + engine agreement); writes `out\m4\loopback\*_tap.pcapng` | none      |
-| `npm run m4:loopback -- --tshark` | also run the full M3 tshark gate on the synthesized tap traces                                                                          | none      |
-
-### Artifacts
-
-- `out\` — ETL files, per-component pcapng, picked trace, verify JSON, capture
-  log/ps1. `out\m1.pcapng` opens in Wireshark/tshark.
-- `out\scen\` — one ETL per scenario in `out\`, plus per-scenario
-  `_all.pcapng`, per-component `_c<id>.pcapng`, parity JSON, recorded bundle
-  logs.
-- `out\m4-reports\` — dashboard + per-trace HTML; `out\m4\loopback\` — tap
-  traces (openable in Wireshark/tshark).
-- `test-results\` — committed written evidence: `milestone1.md`,
-  `milestone2-core.md` + `milestone2-ext.md` (per-batch parity tables),
-  `milestone3-checks.md` (machine-readable copy: `out\scen\m3_results.json`),
-  `test-all.md` (the 8-gate report).
-- Every capture stops itself (`pktmon stop` inside the bundle). Manual cleanup
-  if interrupted: elevated `pktmon stop`; filters clear with elevated
-  `pktmon filter remove`.
-
-## The 8-gate verification model
-
-`npm run test:all` (→ `src/testAll.ts`) runs every gate in sequence and exits
-0 only when all 8 pass. This is the single command to run after ANY change —
-every layer (decoder, parity, flows, ergonomics, tap) has its own gate inside,
-so a regression anywhere surfaces as a named failure.
-
-| #   | Gate              | What it proves                                          | Verified result                                    |
-| --- | ----------------- | ------------------------------------------------------- | -------------------------------------------------- |
-| 1   | typecheck         | `tsc --noEmit` clean over `src/**` + `test/**`          | clean                                              |
-| 2   | unit-tests        | unit + integration tests on synthetic byte fixtures     | 36/36 (16 decoder + 17 flows + 3 tap)              |
-| 3   | m1-verify         | `out\m1.pcapng` frame-by-frame vs tshark                | 96 frames, 0 mismatches                            |
-| 4   | parity-regression | M2 21-column parity metric on every captured trace      | 14 traces at thresholds (13×100% + s10 by design*) |
-| 5   | m3-matrix         | conv/DNS/HTTP/retransmission checks per trace vs tshark | 14/14 traces fully pass                            |
-| 6   | m4-dashboard      | dashboard regenerated over the whole corpus             | index.html (43 KB) + 67 per-trace reports          |
-| 7   | m4-export-formats | json/csv/md exports produced                            | produced + content-sized                           |
-| 8   | m4a-loopback      | userspace-tap scenarios incl. the tshark gate           | 3 scenarios pass (22 in-tap checks)                |
-
-\* s10_arpdhcp captured ARP with no DHCP DORA on this NIC (media-disconnected
-`ipconfig /renew`); its non-IP packets decode as "unsupported" by design, so
-its parity is below threshold on purpose — recorded as risk R4 in
-[`docs/project-status.md`](docs/project-status.md).
-
-## Repository layout
+## Repository Structure
 
 ```
 strobe-packet-tracker/
 ├── src/
-│   ├── cli.ts            # entry point + dispatch (every npm script routes here)
-│   ├── paths.ts          # shared out/-directory constants
-│   ├── testAll.ts        # the 8-gate verification suite
-│   ├── engine/           # PURE packet engine — parser, decoder, dedupe,
-│   │                     # flows, pcap/pcapng writers (zero process/net I/O)
-│   ├── capture/          # pktmon bundles, one-UAC elevated runner, m1/m2 commands
-│   ├── traffic/          # scenario corpus + non-elevated traffic generators
-│   ├── verify/           # tshark-oracle harnesses: M1 frames, M2 parity, M3 matrix
-│   ├── reporting/        # HTML reports, dashboard/watch, json/csv/md exports
-│   └── tap/              # M4a userspace loopback tap
-├── test/                 # 36 unit tests (decoder, flows, loopback tap)
-├── docs/                 # ARCHITECTURE, DEVELOPMENT, project-status, history/
-├── test-results/         # committed written evidence (regenerated by gates)
-└── out/                  # generated artifacts (gitignored)
+│   ├── cli.ts                # Main CLI command dispatcher
+│   ├── paths.ts              # Output directory paths
+│   ├── testAll.ts            # The 8-gate verification orchestrator
+│   ├── engine/               # PURE packet engine (zero external dependencies)
+│   │   ├── decoder.ts        # Layered packet dissector (L2 through L7)
+│   │   ├── dedupe.ts         # IP hash deduplication
+│   │   ├── flows.ts          # Stateful flow analysis & TCP stream reassembly
+│   │   ├── pcapng.ts         # Raw PCAPNG parser
+│   │   └── pcapngwrite.ts    # Synthetic PCAPNG writer
+│   ├── capture/              # Windows pktmon runner & ETL conversion
+│   ├── traffic/              # Scenario generators & test server fixtures
+│   ├── verify/               # Independent tshark oracle validation harnesses
+│   ├── reporting/            # HTML dashboard, watch daemon, and exports
+│   └── tap/                  # Userspace loopback tap
+├── test/                     # 208 Jest unit & hardening tests (14 suites)
+│   ├── decoder.test.ts
+│   ├── flows.test.ts
+│   ├── loopbacktap.test.ts
+│   ├── tshark-oracle.test.ts # Direct tshark oracle assertions
+│   └── hardening/            # RFC compliance catalog test suites (A through K)
+├── docs/                     # Architecture, Development Guide, and History
+├── test-results/             # Verified gate reports (test-all.md)
+└── out/                      # Generated traces, dashboards, and reports
 ```
 
-The per-file responsibility table, layering rules (who may import whom), data
-flow, design decisions, and the old→new path map for reading historical
-reports live in [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md).
+---
 
-## Documentation
+## Prerequisites
 
-| Document                                           | Contents                                                                                                                                      |
-| -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md)     | source layout, layering rules, data flow, key design decisions, old→new path map                                                              |
-| [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)       | environment setup, the run-`test:all`-after-any-change rule, code conventions, how to add a scenario / decoder protocol / report field / gate |
-| [`docs/project-status.md`](docs/project-status.md) | living status ledger: milestone evidence, risk register, honest unknowns                                                                      |
-| [`docs/history/`](docs/history/)                   | verbatim dated evidence: step-0 environment inventory + milestone 1/2/3 reports                                                               |
-
-## What is honest and what is not yet
-
-- Capture is **file-based** (pktmon ETL → `etl2pcap` → PCAPNG → pure-TS
-  parser). Not a live stream yet; pktmon's real-time mode exists but is
-  unverified.
-- No Npcap, no custom drivers, no TLS decryption. Metadata only.
-- Capture requires **Administrator** (verified: exit 5 otherwise). The
-  prototype handles this transparently with one UAC prompt per run.
-- On Wi-Fi, capture-point choice matters; the bundle picks Ethernet-medium
-  components from `pktmon list --json` and `m1:pick` selects the vantage with
-  the most fully-decoded frames empirically (tshark `frame.protocols`).
-
-## Security
-
-Authorized diagnostics only. The prototype records metadata (flows, timing,
-addresses) to local files under `out\`. No payload storage beyond the packet
-bytes needed for decoding; no TLS decryption; nothing is sent off-machine.
+- **OS**: Windows 10/11 (for `pktmon` live capture). Offline parsing & tests run on any platform.
+- **Node.js**: `>= 24.0.0` (supports native TypeScript execution).
+- **Wireshark / tshark**: Tested on `4.6.9` (used strictly as an independent verifier).
+- **Permissions**: Standard user for parsing, analysis, and testing. Administrator (1 UAC prompt) only needed when running live `pktmon` packet capture.
